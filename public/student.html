@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Student Play</title>
+    <link rel="stylesheet" href="/common.css" />
+    <style>
+      .student-page {
+        min-height: 100svh;
+        display: flex;
+        flex-direction: column;
+        background: var(--bg);
+      }
+
+      .student-page main {
+        flex: 1;
+        max-width: 600px;
+        margin: 0 auto;
+        width: 100%;
+        padding: 1rem;
+        display: flex;
+        flex-direction: column;
+        border: 0;
+        background: transparent;
+      }
+
+      .phase-container {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        padding: 1rem;
+      }
+
+      .lobby-info {
+        padding: 1rem;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+      }
+
+      .countdown-display {
+        font-size: 4rem;
+        font-weight: 700;
+        color: var(--primary);
+        margin: 1rem 0;
+      }
+
+      .question-card {
+        width: 100%;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 1rem;
+        margin-bottom: 1rem;
+      }
+
+      .question-text {
+        font-size: 1.15rem;
+        font-weight: 600;
+        margin: 0;
+      }
+
+      .options-grid {
+        display: grid;
+        gap: 0.75rem;
+        margin-top: 1rem;
+      }
+
+      .option-button {
+        min-height: 72px;
+        display: grid;
+        grid-template-columns: auto 1fr auto;
+        align-items: center;
+        gap: 0.7rem;
+        padding: 0.75rem 1rem;
+        border: 2px solid var(--border);
+        border-radius: 10px;
+        background: var(--surface);
+        text-align: left;
+        font-size: 1rem;
+        color: var(--text);
+        cursor: pointer;
+        transition: all 0.15s;
+      }
+
+      .option-button:active:not(:disabled) {
+        transform: scale(0.97);
+        background: #f9fafb;
+      }
+
+      .option-button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+
+      .option-button.picked {
+        border-color: var(--primary);
+        background: rgba(37, 99, 235, 0.05);
+      }
+
+      .option-label {
+        font-weight: 700;
+        font-size: 1.1rem;
+        color: var(--primary);
+      }
+
+      .option-text {
+        flex: 1;
+      }
+
+      .option-slots {
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: var(--muted);
+        white-space: nowrap;
+      }
+
+      .option-slots.low {
+        color: var(--error);
+      }
+
+      .pick-status {
+        padding: 1rem;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        font-weight: 600;
+        color: var(--primary);
+      }
+
+      .eliminated-banner {
+        padding: 2rem 1rem;
+        background: rgba(185, 28, 28, 0.1);
+        border: 2px solid var(--error);
+        border-radius: 12px;
+        text-align: center;
+      }
+
+      .eliminated-title {
+        font-size: 2rem;
+        font-weight: 700;
+        color: var(--error);
+        margin: 0 0 0.5rem;
+      }
+
+      .eliminated-reason {
+        font-size: 1rem;
+        color: var(--muted);
+        margin: 0;
+      }
+
+      .results-card {
+        width: 100%;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 1rem;
+      }
+
+      .results-title {
+        font-size: 1.5rem;
+        font-weight: 700;
+        margin: 0 0 1rem;
+        text-align: center;
+      }
+
+      .leaderboard-entry {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.65rem;
+        border-bottom: 1px solid var(--border);
+      }
+
+      .leaderboard-entry:last-child {
+        border-bottom: 0;
+      }
+
+      .leaderboard-entry.me {
+        background: rgba(37, 99, 235, 0.05);
+        border-radius: 6px;
+        font-weight: 600;
+      }
+
+      .rank-badge {
+        font-weight: 700;
+        font-size: 1rem;
+        color: var(--primary);
+        min-width: 2rem;
+      }
+
+      .player-name {
+        flex: 1;
+      }
+
+      .player-status {
+        font-size: 0.85rem;
+        color: var(--muted);
+      }
+
+      .hidden {
+        display: none !important;
+      }
+    </style>
+  </head>
+  <body class="student-page">
+    <main>
+      <div id="phase-lobby" class="phase-container hidden">
+        <div class="lobby-info">
+          <h2>Waiting for Game</h2>
+          <p class="muted">Host will start soon</p>
+          <p id="lobby-player-count" class="muted"></p>
+        </div>
+      </div>
+
+      <div id="phase-countdown" class="phase-container hidden">
+        <h2>Get Ready!</h2>
+        <div id="countdown-value" class="countdown-display">3</div>
+      </div>
+
+      <div id="phase-round" class="phase-container hidden">
+        <div class="question-card">
+          <p id="round-number" class="muted" style="margin: 0 0 0.5rem; font-size: 0.9rem;">Round 1</p>
+          <p id="question-text" class="question-text">Question text</p>
+        </div>
+        <div id="options-container" class="options-grid">
+          <!-- Options will be rendered here -->
+        </div>
+        <div id="pick-status" class="pick-status hidden">Locked in!</div>
+      </div>
+
+      <div id="phase-eliminated" class="phase-container hidden">
+        <div class="eliminated-banner">
+          <h2 class="eliminated-title">ELIMINATED</h2>
+          <p id="elimination-reason" class="eliminated-reason">You were eliminated</p>
+        </div>
+        <p class="muted" style="margin-top: 1rem;">Waiting for game to finish...</p>
+      </div>
+
+      <div id="phase-results" class="phase-container hidden">
+        <div class="results-card">
+          <h2 class="results-title">Game Over!</h2>
+          <div id="results-leaderboard">
+            <!-- Leaderboard entries here -->
+          </div>
+        </div>
+      </div>
+    </main>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/common.js"></script>
+    <script src="/student.js"></script>
+  </body>
+</html>

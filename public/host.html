@@ -1,0 +1,423 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Host Dashboard</title>
+    <link rel="stylesheet" href="/common.css" />
+    <style>
+      .host-page {
+        min-height: 100vh;
+        background: var(--bg);
+      }
+
+      .host-page main {
+        max-width: 960px;
+        margin: 0 auto;
+        padding: 1.5rem;
+      }
+
+      .dashboard-header {
+        margin-bottom: 1.5rem;
+      }
+
+      .dashboard-title {
+        font-size: 1.8rem;
+        font-weight: 700;
+        margin: 0 0 0.5rem;
+      }
+
+      .dashboard-grid {
+        display: grid;
+        gap: 1rem;
+        grid-template-columns: 1fr 1fr;
+      }
+
+      @media (max-width: 768px) {
+        .dashboard-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      .card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 1rem;
+      }
+
+      .card-title {
+        font-size: 1.1rem;
+        font-weight: 600;
+        margin: 0 0 0.75rem;
+      }
+
+      .join-info {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+      }
+
+      #qr-code {
+        width: 160px;
+        height: 160px;
+        margin: 0 auto;
+        background: #fff;
+        padding: 0.5rem;
+        border-radius: 8px;
+      }
+
+      #qr-code canvas,
+      #qr-code img {
+        display: block;
+        width: 100% !important;
+        height: 100% !important;
+      }
+
+      .join-url-display {
+        padding: 0.65rem;
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        font-family: monospace;
+        font-size: 0.95rem;
+        word-break: break-all;
+        text-align: center;
+      }
+
+      .stat-row {
+        display: flex;
+        gap: 0.5rem;
+        justify-content: space-around;
+        padding: 0.75rem;
+        background: var(--bg);
+        border-radius: 6px;
+      }
+
+      .stat-item {
+        text-align: center;
+      }
+
+      .stat-value {
+        font-size: 1.4rem;
+        font-weight: 700;
+        color: var(--primary);
+      }
+
+      .stat-label {
+        font-size: 0.85rem;
+        color: var(--muted);
+      }
+
+      .player-list {
+        display: grid;
+        gap: 0.4rem;
+        max-height: 300px;
+        overflow-y: auto;
+      }
+
+      .player-entry {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.5rem;
+        background: var(--bg);
+        border-radius: 6px;
+        font-size: 0.9rem;
+      }
+
+      .player-status-badge {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        flex-shrink: 0;
+      }
+
+      .player-status-badge.ready {
+        background: #22c55e;
+      }
+
+      .player-status-badge.alive {
+        background: var(--primary);
+      }
+
+      .player-status-badge.eliminated {
+        background: var(--error);
+      }
+
+      .player-name {
+        flex: 1;
+      }
+
+      .player-meta {
+        font-size: 0.8rem;
+        color: var(--muted);
+      }
+
+      .start-button {
+        width: 100%;
+        min-height: 56px;
+        border: 0;
+        border-radius: 8px;
+        background: #16a34a;
+        color: #fff;
+        font-size: 1.1rem;
+        font-weight: 700;
+        cursor: pointer;
+        transition: background 0.2s;
+      }
+
+      .start-button:hover:not(:disabled) {
+        background: #15803d;
+      }
+
+      .start-button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+
+      .round-display {
+        grid-column: 1 / -1;
+      }
+
+      .round-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 0.75rem;
+      }
+
+      .round-number-badge {
+        padding: 0.4rem 0.7rem;
+        background: var(--primary);
+        color: #fff;
+        border-radius: 6px;
+        font-weight: 600;
+        font-size: 0.9rem;
+      }
+
+      .round-timer {
+        font-size: 0.9rem;
+        color: var(--muted);
+      }
+
+      .question-display {
+        padding: 1rem;
+        background: var(--bg);
+        border-radius: 8px;
+        margin-bottom: 1rem;
+      }
+
+      .question-text {
+        font-size: 1.1rem;
+        font-weight: 600;
+        margin: 0;
+      }
+
+      .options-display {
+        display: grid;
+        gap: 0.75rem;
+      }
+
+      .option-bar {
+        padding: 0.75rem;
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+      }
+
+      .option-header {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin-bottom: 0.5rem;
+      }
+
+      .option-label {
+        font-weight: 700;
+        color: var(--primary);
+        font-size: 1rem;
+      }
+
+      .option-text {
+        flex: 1;
+        font-size: 0.95rem;
+      }
+
+      .option-stats {
+        display: flex;
+        gap: 1rem;
+        font-size: 0.85rem;
+      }
+
+      .option-stat {
+        display: flex;
+        gap: 0.3rem;
+      }
+
+      .option-stat-label {
+        color: var(--muted);
+      }
+
+      .option-stat-value {
+        font-weight: 600;
+      }
+
+      .option-progress {
+        height: 24px;
+        background: #e5e7eb;
+        border-radius: 4px;
+        overflow: hidden;
+        margin-top: 0.5rem;
+        position: relative;
+      }
+
+      .option-progress-fill {
+        height: 100%;
+        background: var(--primary);
+        transition: width 0.3s;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #fff;
+        font-size: 0.75rem;
+        font-weight: 600;
+      }
+
+      .option-progress-fill.full {
+        background: var(--error);
+      }
+
+      .countdown-display {
+        text-align: center;
+        padding: 2rem;
+      }
+
+      .countdown-value {
+        font-size: 3rem;
+        font-weight: 700;
+        color: var(--primary);
+      }
+
+      .results-display {
+        grid-column: 1 / -1;
+      }
+
+      .podium {
+        display: flex;
+        gap: 1rem;
+        justify-content: center;
+        margin-bottom: 1rem;
+      }
+
+      .podium-entry {
+        text-align: center;
+        padding: 1rem;
+        background: var(--bg);
+        border-radius: 8px;
+        min-width: 120px;
+      }
+
+      .podium-rank {
+        font-size: 2rem;
+        font-weight: 700;
+        color: var(--primary);
+      }
+
+      .podium-name {
+        font-weight: 600;
+        margin-top: 0.25rem;
+      }
+
+      .hidden {
+        display: none !important;
+      }
+    </style>
+  </head>
+  <body class="host-page">
+    <main>
+      <div class="dashboard-header">
+        <h1 class="dashboard-title">Host Dashboard</h1>
+        <p class="muted">Manage your classroom game session</p>
+      </div>
+
+      <div class="dashboard-grid">
+        <!-- Join Info Card -->
+        <div class="card">
+          <h2 class="card-title">Student Join</h2>
+          <div class="join-info">
+            <div id="qr-code"></div>
+            <div id="join-url" class="join-url-display">Loading...</div>
+          </div>
+        </div>
+
+        <!-- Stats Card -->
+        <div class="card">
+          <h2 class="card-title">Game Stats</h2>
+          <div class="stat-row">
+            <div class="stat-item">
+              <div id="stat-total" class="stat-value">0</div>
+              <div class="stat-label">Total</div>
+            </div>
+            <div class="stat-item">
+              <div id="stat-ready" class="stat-value">0</div>
+              <div class="stat-label">Ready</div>
+            </div>
+            <div class="stat-item">
+              <div id="stat-alive" class="stat-value">0</div>
+              <div class="stat-label">Alive</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Players Card -->
+        <div class="card">
+          <h2 class="card-title">Players</h2>
+          <div id="player-list" class="player-list">
+            <p class="muted">No players yet</p>
+          </div>
+        </div>
+
+        <!-- Control Card -->
+        <div class="card">
+          <h2 class="card-title">Control</h2>
+          <button id="start-button" class="start-button" disabled>Start Game</button>
+        </div>
+
+        <!-- Countdown Display -->
+        <div id="countdown-card" class="card hidden" style="grid-column: 1 / -1;">
+          <div class="countdown-display">
+            <h2>Game Starting...</h2>
+            <div id="countdown-value" class="countdown-value">3</div>
+          </div>
+        </div>
+
+        <!-- Round Display -->
+        <div id="round-card" class="card round-display hidden">
+          <div class="round-header">
+            <span id="round-number" class="round-number-badge">Round 1</span>
+            <span id="round-timer" class="round-timer"></span>
+          </div>
+          <div class="question-display">
+            <p id="question-text" class="question-text">Question will appear here</p>
+          </div>
+          <div id="options-display" class="options-display">
+            <!-- Options will be rendered here -->
+          </div>
+        </div>
+
+        <!-- Results Display -->
+        <div id="results-card" class="card results-display hidden">
+          <h2 class="card-title">Game Over - Top 3</h2>
+          <div id="podium" class="podium">
+            <!-- Podium entries here -->
+          </div>
+        </div>
+      </div>
+    </main>
+    <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/common.js"></script>
+    <script src="/host.js"></script>
+  </body>
+</html>

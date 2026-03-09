@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Join Classroom Game</title>
+    <link rel="stylesheet" href="/common.css" />
+  </head>
+  <body class="join-page">
+    <main>
+      <section class="join-card" aria-labelledby="join-title">
+        <h1 id="join-title">Join the Game</h1>
+        <p class="muted join-subtitle">Enter your nickname to play on this device.</p>
+
+        <form id="join-form" class="join-form" novalidate>
+          <label class="field-label" for="nickname">Nickname</label>
+          <input
+            id="nickname"
+            name="nickname"
+            class="text-input"
+            type="text"
+            placeholder="e.g. Alex"
+            minlength="2"
+            maxlength="16"
+            autocomplete="nickname"
+            required
+          />
+          <p id="join-error" class="error-text" role="alert" aria-live="polite"></p>
+
+          <button id="join-button" class="primary-button" type="submit">Join</button>
+        </form>
+      </section>
+    </main>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/common.js"></script>
+  </body>
+</html>
