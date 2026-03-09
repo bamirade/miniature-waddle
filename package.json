@@ -3,13 +3,52 @@
   "version": "0.1.0",
   "private": true,
   "description": "Local multiplayer classroom warm-up game (skeleton)",
-  "main": "src/server.js",
+  "main": "electron.js",
   "scripts": {
     "dev": "node src/server.js",
-    "start": "node src/server.js"
+    "start": "node src/server.js",
+    "electron": "electron .",
+    "build": "electron-builder --win --x64",
+    "build:all": "electron-builder --win --x64 --ia32"
   },
   "dependencies": {
     "express": "^4.21.2",
     "socket.io": "^4.8.1"
+  },
+  "devDependencies": {
+    "electron": "^40.8.0",
+    "electron-builder": "^26.8.1"
+  },
+  "build": {
+    "appId": "com.miniaturewaddle.host",
+    "productName": "Game Host",
+    "files": [
+      "electron.js",
+      "src/**/*",
+      "public/**/*",
+      "node_modules/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "build/configure-firewall.ps1",
+        "to": "configure-firewall.ps1"
+      },
+      {
+        "from": "build/configure-firewall.bat",
+        "to": "configure-firewall.bat"
+      }
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "public/icon.png",
+      "requestedExecutionLevel": "requireAdministrator"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "allowElevation": true,
+      "include": "build/installer.nsh",
+      "perMachine": true
+    }
   }
 }
