@@ -1,7 +1,17 @@
 /**
  * Game configuration constants and phase definitions
+ * Central location for all game timing, phases, and event names
  */
 
+/**
+ * Game phase constants
+ * @typedef {Object} GamePhases
+ * @property {string} LOBBY - Waiting for players to join
+ * @property {string} COUNTDOWN - 3-second countdown before round starts
+ * @property {string} ROUND - Active round where players pick answers
+ * @property {string} REVEAL - Showing correct answer and eliminations
+ * @property {string} FINISHED - Game over, showing results
+ */
 const PHASES = Object.freeze({
   LOBBY: 'lobby',
   COUNTDOWN: 'countdown',
@@ -10,12 +20,36 @@ const PHASES = Object.freeze({
   FINISHED: 'finished',
 });
 
+/**
+ * Game timing configuration in milliseconds
+ * @typedef {Object} GameTimings
+ * @property {number} COUNTDOWN_MS - Duration of countdown phase (3000ms = 3 seconds)
+ * @property {number} ROUND_OPEN_MS - Time players have to pick (10000ms = 10 seconds)
+ * @property {number} REVEAL_MS - Time to show results (2000ms = 2 seconds)
+ */
 const TIMINGS = Object.freeze({
   COUNTDOWN_MS: 3000,
   ROUND_OPEN_MS: 10000,
   REVEAL_MS: 2000,
 });
 
+/**
+ * Core game rules configuration
+ * @typedef {Object} GameConfig
+ * @property {number} STARTING_LIVES - Lives each player starts with
+ * @property {number} SURVIVOR_THRESHOLD - Max alive players before game ends(value: 3)
+ * @property {number} OPTIONS_PER_QUESTION - Number of answer options (A/B/C/D = 4)
+ */
+const GAME_CONFIG = Object.freeze({
+  STARTING_LIVES: 3,
+  SURVIVOR_THRESHOLD: 3,
+  OPTIONS_PER_QUESTION: 4,
+});
+
+/**
+ * Socket.IO event names for client-server communication
+ * @typedef {Object} EventNames
+ */
 const EVENT_NAMES = Object.freeze({
   LOBBY_STATE: 'lobby:state',
   COUNTDOWN_STARTED: 'game:countdownStarted',
@@ -23,6 +57,7 @@ const EVENT_NAMES = Object.freeze({
   ROUND_STARTED: 'game:roundStarted',
   ROUND_SLOTS: 'game:roundSlots',
   PICK_RESULT: 'game:pickResult',
+  PLAYER_LIFE_LOST: 'game:playerLifeLost',
   PLAYER_ELIMINATED: 'game:playerEliminated',
   ROUND_REVEAL: 'game:roundReveal',
   GAME_FINISHED: 'game:finished',
@@ -42,6 +77,7 @@ const EVENT_PAYLOADS = Object.freeze({
         connectedAt: 0,
         ready: false,
         status: 'alive',
+        lives: 3,
         eliminatedRound: null,
         eliminationReason: null,
       },
@@ -88,6 +124,15 @@ const EVENT_PAYLOADS = Object.freeze({
     eliminated: false,
     slotsLeft: [0, 0, 0, 0],
   },
+  PLAYER_LIFE_LOST: {
+    roundNumber: 1,
+    playerId: 'socketId',
+    name: 'Player',
+    reason: 'wrong',
+    option: 0,
+    livesRemaining: 2,
+    at: 0,
+  },
   PLAYER_ELIMINATED: {
     roundNumber: 1,
     playerId: 'socketId',
@@ -129,6 +174,7 @@ const EVENT_PAYLOADS = Object.freeze({
 module.exports = {
   PHASES,
   TIMINGS,
+  GAME_CONFIG,
   EVENT_NAMES,
   EVENT_PAYLOADS,
 };

@@ -7,6 +7,7 @@
   const socket = io();
   let currentPhase = 'lobby';
   let myPlayerId = null;
+  let myLives = 3;
   let isEliminated = false;
   let hasPicked = false;
   let currentRoundNumber = 0;
@@ -14,6 +15,16 @@
   let currentSlotsLeft = [0, 0, 0, 0];
   let roundEndTime = null;
   let timerInterval = null;
+
+  // Prevent accidental navigation during active game
+  window.addEventListener('beforeunload', (e) => {
+    // Warn if game is in progress (not in lobby phase)
+    if (currentPhase && currentPhase !== 'lobby') {
+      e.preventDefault();
+      e.returnValue = 'Game in progress. Leave anyway?';
+      return 'Game in progress. Leave anyway?';
+    }
+  });
 
   const phases = {
     lobby: document.getElementById('phase-lobby'),
@@ -34,7 +45,8 @@
     resultsLeaderboard: document.getElementById('results-leaderboard'),
     connectionStatus: document.getElementById('connection-status'),
     connectionText: document.getElementById('connection-text'),
-    roundTimer: document.getElementById('round-timer')
+    roundTimer: document.getElementById('round-timer'),
+    livesDisplay: document.getElementById('lives-display')
   };
 
   // Connection Status Management
@@ -96,6 +108,60 @@
       elements.roundTimer.classList.add('hidden');
     }
     roundEndTime = null;
+  }
+
+  // Lives Display Management
+  function updateLivesDisplay(lives) {
+    if (!elements.livesDisplay) return;
+
+    myLives = lives;
+    const hearts = elements.livesDisplay.querySelectorAll('.heart');
+
+    hearts.forEach((heart, index) => {
+      if (index < lives) {
+        heart.classList.remove('lost');
+      } else {
+        heart.classList.add('lost');
+      }
+    });
+
+    // Show lives display when game starts
+    if (lives > 0 && currentPhase !== 'lobby') {
+      elements.livesDisplay.classList.remove('hidden');
+    }
+  }
+
+  function showLifeLostNotification(reason) {
+    // Shake the lives display
+    if (elements.livesDisplay) {
+      elements.livesDisplay.classList.add('losing-life');
+      setTimeout(() => {
+        elements.livesDisplay.classList.remove('losing-life');
+      }, 500);
+    }
+
+    // Create and show life lost notification
+    const notification = document.createElement('div');
+    notification.className = 'life-lost-notification';
+
+    const reasonText = {
+      full: 'OPTION FULL',
+      timeout: 'TOO SLOW',
+      wrong: 'WRONG ANSWER'
+    }[reason] || 'LIFE LOST';
+
+    notification.textContent = `${reasonText} - LIFE LOST!`;
+    document.body.appendChild(notification);
+
+    // Remove notification after animation
+    setTimeout(() => {
+      notification.remove();
+    }, 1000);
+
+    // Show toast
+    if (window.appCommon && window.appCommon.showToast) {
+      window.appCommon.showToast(`You lost a life! ${myLives} remaining`, 'error', 2000);
+    }
   }
 
   function showPhase(phaseName) {
@@ -215,7 +281,12 @@
   function handleElimination(reason) {
     isEliminated = true;
     currentPhase = 'eliminated';
+    myLives = 0;
     stopRoundTimer();
+
+    if (elements.livesDisplay) {
+      elements.livesDisplay.classList.add('hidden');
+    }
 
     if (elements.eliminationReason) {
       const reasonText = {
@@ -309,6 +380,13 @@
         hasPicked = false;
         currentRoundNumber = 0;
         currentQuestion = null;
+        myLives = 3;
+        updateLivesDisplay(3);
+
+        // Hide lives display in lobby
+        if (elements.livesDisplay) {
+          elements.livesDisplay.classList.add('hidden');
+        }
       }
       stopRoundTimer();
       showPhase('lobby');
@@ -417,7 +495,23 @@
   socket.on('player:result', (data) => {
     if (!data) return;
 
-    if (data.eliminated && data.playerId === myPlayerId) {
+    if (data.status === 'error') {
+      if (window.appCommon && window.appCommon.showToast) {
+        window.appCommon.showToast(data.reason, 'error');
+      } else {
+        alert(data.reason);
+      }
+      // Redirect back to join page after a short delay
+      setTimeout(() => {
+        window.location.assign('/');
+      }, 3000);
+    } else if (data.status === 'life_lost' && data.playerId === myPlayerId) {
+      // Handle life lost from pick result
+      if (typeof data.livesRemaining === 'number') {
+        updateLivesDisplay(data.livesRemaining);
+        showLifeLostNotification(data.reason);
+      }
+    } else if (data.eliminated && data.playerId === myPlayerId) {
       handleElimination(data.reason);
     } else if (data.status === 'accepted' && data.playerId === myPlayerId) {
       updateSlots(data.slotsLeft);
@@ -431,6 +525,119 @@
     currentPhase = 'results';
     renderResults(data);
     showPhase('results');
+
+    // Hide lives display
+    if (elements.livesDisplay) {
+      elements.livesDisplay.classList.add('hidden');
+    }
+  });
+
+  // Handle countdown starting
+  socket.on('game:countdownStarted', (data) => {
+    if (!data || isEliminated) return;
+
+    currentPhase = 'countdown';
+    stopRoundTimer();
+
+    // Initialize lives display for new game
+    myLives = 3;
+    updateLivesDisplay(3);
+
+    if (elements.countdownValue) {
+      elements.countdownValue.textContent = data.secondsLeft || 3;
+    }
+    showPhase('countdown');
+  });
+
+  // Handle countdown ticks
+  socket.on('game:countdownTick', (data) => {
+    if (!data || isEliminated) return;
+
+    if (elements.countdownValue) {
+      elements.countdownValue.textContent = data.secondsLeft || 0;
+    }
+  });
+
+  // Handle round start
+  socket.on('game:roundStarted', (data) => {
+    if (!data || isEliminated) return;
+
+    currentPhase = 'round';
+    currentRoundNumber = data.roundNumber || 0;
+    currentQuestion = data.question;
+    currentSlotsLeft = data.slotsLeft || [0, 0, 0, 0];
+    hasPicked = false;
+
+    // Show lives display
+    updateLivesDisplay(myLives);
+
+    if (elements.roundNumber) {
+      elements.roundNumber.textContent = `Round ${currentRoundNumber}`;
+    }
+    if (elements.questionText && currentQuestion) {
+      elements.questionText.textContent = currentQuestion.text || '';
+    }
+    if (elements.pickStatus) {
+      elements.pickStatus.classList.add('hidden');
+    }
+
+    // Start timer
+    if (data.endsAt) {
+      startRoundTimer(data.endsAt);
+    }
+
+    renderOptions();
+    showPhase('round');
+  });
+
+  // Handle slot updates
+  socket.on('game:roundSlots', (data) => {
+    if (!data || isEliminated) return;
+
+    updateSlots(data.slotsLeft);
+  });
+
+  // Handle life lost event
+  socket.on('game:playerLifeLost', (data) => {
+    if (!data || data.playerId !== myPlayerId) return;
+
+    // Update lives and show notification
+    if (typeof data.livesRemaining === 'number') {
+      updateLivesDisplay(data.livesRemaining);
+      showLifeLostNotification(data.reason);
+    }
+  });
+
+  // Handle player elimination
+  socket.on('game:playerEliminated', (data) => {
+    if (!data || data.playerId !== myPlayerId) return;
+
+    handleElimination(data.reason);
+  });
+
+  // Handle round reveal
+  socket.on('game:roundReveal', (data) => {
+    if (!data || isEliminated) return;
+
+    stopRoundTimer();
+
+    // Keep showing the round phase with results
+    // (Host will show full reveal, students just wait)
+  });
+
+  // Handle game finished
+  socket.on('game:finished', (data) => {
+    if (!data) return;
+
+    stopRoundTimer();
+    currentPhase = 'results';
+    renderResults(data);
+    showPhase('results');
+
+    // Hide lives display
+    if (elements.livesDisplay) {
+      elements.livesDisplay.classList.add('hidden');
+    }
   });
 
   // Keyboard shortcuts for options (A, B, C, D)

@@ -33,6 +33,54 @@
         transition: all 0.3s ease;
       }
 
+      /* Lives Display */
+      .lives-display {
+        position: fixed;
+        top: 0.75rem;
+        left: 50%;
+        transform: translateX(-50%);
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        padding: 0.5rem 0.9rem;
+        background: var(--surface-elevated);
+        border: 1px solid var(--border);
+        border-radius: 0;
+        z-index: 1000;
+        transition: all 0.3s ease;
+      }
+
+      .lives-display .heart {
+        font-size: 1.2rem;
+        color: var(--error);
+        transition: all 0.3s ease;
+        animation: heartbeat 1.5s ease-in-out infinite;
+      }
+
+      .lives-display .heart.lost {
+        opacity: 0.3;
+        filter: grayscale(100%);
+        animation: none;
+      }
+
+      @keyframes heartbeat {
+        0%, 100% { transform: scale(1); }
+        10% { transform: scale(1.1); }
+        20% { transform: scale(1); }
+      }
+
+      .lives-display.losing-life {
+        animation: shake 0.5s ease;
+        border-color: var(--error);
+        box-shadow: 0 0 20px var(--error-glow);
+      }
+
+      @keyframes shake {
+        0%, 100% { transform: translateX(-50%) translateY(0); }
+        10%, 30%, 50%, 70%, 90% { transform: translateX(-50%) translateY(-5px); }
+        20%, 40%, 60%, 80% { transform: translateX(-50%) translateY(5px); }
+      }
+
       .connection-status .status-dot {
         width: 6px;
         height: 6px;
@@ -334,6 +382,21 @@
         border: 1px solid var(--error);
         border-radius: 0;
         text-align: center;
+        animation: eliminationBanner 0.8s ease-out;
+      }
+
+      @keyframes eliminationBanner {
+        0% {
+          opacity: 0;
+          transform: scale(0.8) rotateX(-90deg);
+        }
+        50% {
+          transform: scale(1.05) rotateX(5deg);
+        }
+        100% {
+          opacity: 1;
+          transform: scale(1) rotateX(0);
+        }
       }
 
       .eliminated-title {
@@ -343,6 +406,60 @@
         margin: 0 0 0.5rem;
         letter-spacing: 0.15em;
         text-shadow: 0 0 20px var(--error-glow);
+        animation: eliminationText 0.6s ease-out;
+      }
+
+      @keyframes eliminationText {
+        0% {
+          opacity: 0;
+          transform: scale(0);
+        }
+        60% {
+          transform: scale(1.2);
+        }
+        100% {
+          opacity: 1;
+          transform: scale(1);
+        }
+      }
+
+      /* Life Lost Notification */
+      .life-lost-notification {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: rgba(255, 51, 102, 0.95);
+        color: white;
+        padding: 2rem 3rem;
+        border: 2px solid var(--error);
+        border-radius: 0;
+        font-size: 2rem;
+        font-weight: 300;
+        letter-spacing: 0.1em;
+        z-index: 2000;
+        box-shadow: 0 0 40px var(--error-glow);
+        animation: lifeLostPop 1s ease-out forwards;
+        pointer-events: none;
+      }
+
+      @keyframes lifeLostPop {
+        0% {
+          opacity: 0;
+          transform: translate(-50%, -50%) scale(0.5);
+        }
+        20% {
+          opacity: 1;
+          transform: translate(-50%, -50%) scale(1.2);
+        }
+        80% {
+          opacity: 1;
+          transform: translate(-50%, -50%) scale(1);
+        }
+        100% {
+          opacity: 0;
+          transform: translate(-50%, -50%) scale(0.8);
+        }
       }
 
       .eliminated-reason {
@@ -415,6 +532,13 @@
     <div class="connection-status connecting" id="connection-status">
       <div class="status-dot"></div>
       <span id="connection-text">Connecting...</span>
+    </div>
+
+    <!-- Lives Display -->
+    <div class="lives-display hidden" id="lives-display">
+      <span class="heart" data-life="1">❤️</span>
+      <span class="heart" data-life="2">❤️</span>
+      <span class="heart" data-life="3">❤️</span>
     </div>
 
     <!-- Round Timer -->

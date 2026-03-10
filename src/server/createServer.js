@@ -29,7 +29,18 @@ function createServer(options = {}) {
 
   const app = express();
   const server = http.createServer(app);
-  const io = new Server(server);
+
+  // Configure Socket.IO for classroom environments with multiple concurrent connections
+  const io = new Server(server, {
+    pingInterval: 25000,           // Ping interval in ms (default 25s)
+    pingTimeout: 60000,            // Ping timeout in ms (default 60s)
+    maxHttpBufferSize: 1e6,        // Max HTTP buffer size (1MB, default 100KB)
+    cors: {
+      origin: '*',
+      methods: ['GET', 'POST']
+    },
+    transports: ['websocket', 'polling'], // Try WebSocket first, fallback to polling
+  });
 
   const LAN_IP = process.env.HOST_IP || getPreferredLanIpv4();
   const JOIN_URL = `http://${LAN_IP}:${port}/`;

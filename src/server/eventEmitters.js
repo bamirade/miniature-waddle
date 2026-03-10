@@ -58,11 +58,12 @@ function createEventEmitter(io, gameState, buildGameStatePayload) {
           }
           break;
 
+        case EVENT_NAMES.PLAYER_LIFE_LOST:
+          io.emit('game:playerLifeLost', event.payload);
+          break;
+
         case EVENT_NAMES.PLAYER_ELIMINATED:
-          io.emit('round:update', {
-            type: 'elimination',
-            ...event.payload,
-          });
+          io.emit('game:playerEliminated', event.payload);
           break;
 
         case EVENT_NAMES.ROUND_REVEAL:

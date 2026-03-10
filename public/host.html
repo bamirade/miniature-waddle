@@ -645,6 +645,132 @@
       .hidden {
         display: none !important;
       }
+
+      /* AI Simulation Controls */
+      .ai-control-form {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+      }
+
+      .ai-toggle-button {
+        width: 100%;
+        min-height: 48px;
+        border: 1px solid var(--primary);
+        border-radius: 0;
+        background: transparent;
+        color: var(--primary);
+        font-size: 0.9rem;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.15s ease;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+
+      .ai-toggle-button:hover {
+        background: var(--primary-glow);
+        box-shadow: 0 0 15px var(--primary-glow);
+      }
+
+      .ai-toggle-button.active {
+        background: var(--primary);
+        color: #000;
+        border-color: var(--primary);
+      }
+
+      .ai-toggle-button:disabled {
+        opacity: 0.3;
+        cursor: not-allowed;
+      }
+
+      .ai-config-section {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+        padding: 0.75rem;
+        background: var(--surface-elevated);
+        border: 1px solid var(--border);
+      }
+
+      .ai-config-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 0.5rem;
+      }
+
+      .ai-config-label {
+        font-size: 0.85rem;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+
+      .ai-config-value {
+        font-size: 0.9rem;
+        font-weight: 500;
+        color: var(--text);
+        min-width: 2rem;
+        text-align: right;
+      }
+
+      .ai-slider {
+        width: 100%;
+        height: 4px;
+        background: var(--border);
+        border-radius: 0;
+        outline: none;
+        -webkit-appearance: none;
+        cursor: pointer;
+      }
+
+      .ai-slider::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        appearance: none;
+        width: 16px;
+        height: 16px;
+        background: var(--primary);
+        cursor: pointer;
+        border: 2px solid var(--primary);
+      }
+
+      .ai-slider::-moz-range-thumb {
+        width: 16px;
+        height: 16px;
+        background: var(--primary);
+        cursor: pointer;
+        border: 2px solid var(--primary);
+        border-radius: 0;
+      }
+
+      .ai-difficulty-select {
+        width: 100%;
+        padding: 0.5rem;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 0;
+        color: var(--text);
+        font-size: 0.85rem;
+        cursor: pointer;
+      }
+
+      .ai-difficulty-select:focus {
+        outline: none;
+        border-color: var(--primary);
+      }
+
+      .ai-status {
+        padding: 0.5rem;
+        text-align: center;
+        font-size: 0.8rem;
+        color: var(--muted);
+        border-top: 1px solid var(--border);
+      }
+
+      .ai-status.active {
+        color: var(--success);
+      }
     </style>
   </head>
   <body class="host-page">
@@ -709,6 +835,37 @@
           <button id="start-button" class="start-button" disabled>Start Game</button>
         </div>
 
+        <!-- AI Simulation Card -->
+        <div class="card">
+          <h2 class="card-title">AI Testing</h2>
+          <div class="ai-control-form">
+            <button id="ai-toggle-button" class="ai-toggle-button">Enable AI Bots</button>
+            <div class="ai-config-section">
+              <div class="ai-config-row">
+                <label class="ai-config-label" for="ai-bot-count-slider">Bot Count</label>
+                <span id="ai-bot-count-value" class="ai-config-value">5</span>
+              </div>
+              <input
+                type="range"
+                id="ai-bot-count-slider"
+                class="ai-slider"
+                min="1"
+                max="20"
+                value="5"
+              />
+              <div class="ai-config-row">
+                <label class="ai-config-label" for="ai-difficulty-select">Difficulty</label>
+              </div>
+              <select id="ai-difficulty-select" class="ai-difficulty-select">
+                <option value="easy">Easy (80% correct)</option>
+                <option value="medium" selected>Medium (60% correct)</option>
+                <option value="hard">Hard (40% correct)</option>
+              </select>
+            </div>
+            <div id="ai-status" class="ai-status">AI bots disabled</div>
+          </div>
+        </div>
+
         <!-- Countdown Display -->
         <div id="countdown-card" class="card hidden" style="grid-column: 1 / -1;">
           <div class="countdown-display">
@@ -743,6 +900,7 @@
     <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
     <script src="/socket.io/socket.io.js"></script>
     <script src="/common.js"></script>
+    <script src="/ai-simulation.js"></script>
     <script src="/host.js"></script>
   </body>
 </html>

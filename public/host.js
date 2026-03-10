@@ -6,10 +6,39 @@
 
   const socket = io();
   let currentPhase = 'lobby';
+  let previousPhase = null;
   let lobbyData = null;
   let currentRound = null;
   let flashTimerInterval = null;
   let flashEndTime = null;
+
+  // Prevent accidental host dashboard close during active game
+  window.addEventListener('beforeunload', (e) => {
+    // Warn if game is in progress
+    if (currentPhase && currentPhase !== 'lobby') {
+      e.preventDefault();
+      e.returnValue = 'Game in progress. Close dashboard anyway?';
+      return 'Game in progress. Close dashboard anyway?';
+    }
+  });
+
+  // AI Simulation
+  let aiSimulation = null;
+  if (window.AISimulation) {
+    try {
+      aiSimulation = new window.AISimulation();
+      if (aiSimulation && typeof aiSimulation.init === 'function') {
+        aiSimulation.init(() => io('/', {
+          forceNew: true,
+          reconnection: true,
+          timeout: 8000
+        }));
+      }
+    } catch (err) {
+      console.warn('AI Simulation init failed:', err);
+      aiSimulation = null;
+    }
+  }
 
   const elements = {
     qrCode: document.getElementById('qr-code'),
@@ -32,33 +61,52 @@
     flashQuestion: document.getElementById('flash-question'),
     flashOptions: document.getElementById('flash-options'),
     flashTimer: document.getElementById('flash-timer'),
-    flashRound: document.getElementById('flash-round')
+    flashRound: document.getElementById('flash-round'),
+    // AI Controls
+    aiToggleButton: document.getElementById('ai-toggle-button'),
+    aiBotCountSlider: document.getElementById('ai-bot-count-slider'),
+    aiBotCountValue: document.getElementById('ai-bot-count-value'),
+    aiDifficultySelect: document.getElementById('ai-difficulty-select'),
+    aiStatus: document.getElementById('ai-status')
   };
 
   function initJoinInfo() {
     fetch('/config')
-      .then((res) => res.json())
+      .then((res) => {
+        if (!res.ok) {
+          throw new Error(`Server returned status ${res.status}`);
+        }
+        return res.json();
+      })
       .then((config) => {
-        const joinUrl = config.joinUrl || 'http://localhost:3000/';
+        if (!config || typeof config !== 'object') {
+          throw new Error('Invalid config response');
+        }
+        const joinUrl = config.joinUrl || `http://${config.ip || 'localhost'}:${config.port || 3000}/`;
         if (elements.joinUrl) {
           elements.joinUrl.textContent = joinUrl;
         }
 
         if (elements.qrCode && typeof QRCode === 'function') {
-          elements.qrCode.innerHTML = '';
-          new QRCode(elements.qrCode, {
-            text: joinUrl,
-            width: 160,
-            height: 160,
-            colorDark: '#000000',
-            colorLight: '#ffffff',
-            correctLevel: QRCode.CorrectLevel.M
-          });
+          try {
+            elements.qrCode.innerHTML = '';
+            new QRCode(elements.qrCode, {
+              text: joinUrl,
+              width: 160,
+              height: 160,
+              colorDark: '#000000',
+              colorLight: '#ffffff',
+              correctLevel: QRCode.CorrectLevel.M
+            });
+          } catch (err) {
+            console.warn('QR code generation failed:', err);
+          }
         }
       })
-      .catch(() => {
+      .catch((err) => {
+        console.error('Failed to load config:', err);
         if (elements.joinUrl) {
-          elements.joinUrl.textContent = 'Error loading join URL';
+          elements.joinUrl.textContent = 'Error: Cannot load join URL';
         }
       });
   }
@@ -105,7 +153,12 @@
           metaText = 'ready';
         } else {
           badgeClass = 'alive';
-          metaText = 'alive';
+          // Show lives for alive players during game
+          if (currentPhase !== 'lobby' && typeof player.lives === 'number') {
+            metaText = `${player.lives} ❤️`;
+          } else {
+            metaText = 'alive';
+          }
         }
       }
 
@@ -391,7 +444,8 @@
     if (!data) return;
 
     lobbyData = data;
-    currentPhase = data.phase || 'lobby';
+    const newPhase = data.phase || 'lobby';
+    onPhaseChange(newPhase);
 
     updateStats(data);
     renderPlayerList(data.players || []);
@@ -402,6 +456,7 @@
     if (!data) return;
 
     const phase = data.phase;
+    onPhaseChange(phase);
 
     if (phase === 'lobby') {
       currentPhase = 'lobby';
@@ -486,7 +541,7 @@
   socket.on('round:new', (data) => {
     if (!data) return;
 
-    currentPhase = 'round';
+    onPhaseChange('round');
     currentRound = data;
 
     if (elements.roundNumber) {
@@ -544,10 +599,41 @@
   socket.on('game:results', (data) => {
     if (!data) return;
 
-    currentPhase = 'finished';
+    onPhaseChange('finished');
     hideFlashOverlay();
     renderResults(data);
     showCard('results');
+  });
+
+  // Handle life lost events
+  socket.on('game:playerLifeLost', (data) => {
+    if (!data || !lobbyData) return;
+
+    // Update player's lives in local lobby data
+    const player = (lobbyData.players || []).find(p => p.id === data.playerId);
+    if (player && typeof data.livesRemaining === 'number') {
+      player.lives = data.livesRemaining;
+      renderPlayerList(lobbyData.players || []);
+    }
+  });
+
+  // Handle player elimination events
+  socket.on('game:playerEliminated', (data) => {
+    if (!data || !lobbyData) return;
+
+    // Update player's status in local lobby data
+    const player = (lobbyData.players || []).find(p => p.id === data.playerId);
+    if (player) {
+      player.status = 'eliminated';
+      player.lives = 0;
+      player.eliminatedRound = data.roundNumber;
+      player.eliminationReason = data.reason;
+      renderPlayerList(lobbyData.players || []);
+      updateStats({
+        ...lobbyData,
+        aliveCount: (lobbyData.players || []).filter(p => p.status === 'alive').length
+      });
+    }
   });
 
   if (elements.startButton) {
@@ -557,5 +643,134 @@
     });
   }
 
+  // AI Simulation Controls
+  function updateAIStatus(enabled) {
+    if (!elements.aiStatus) return;
+
+    if (!aiSimulation) {
+      elements.aiStatus.textContent = 'AI simulation unavailable';
+      elements.aiStatus.classList.remove('active');
+      return;
+    }
+
+    if (enabled) {
+      const status = aiSimulation.getStatus();
+      const joinedCount = status.joinedCount || 0;
+      const targetCount = status.targetBotCount || status.botCount || 0;
+      const readyCount = status.readyCount || 0;
+      elements.aiStatus.textContent = `${joinedCount}/${targetCount} joined, ${readyCount} ready`;
+      elements.aiStatus.classList.add('active');
+    } else {
+      elements.aiStatus.textContent = 'AI bots disabled';
+      elements.aiStatus.classList.remove('active');
+    }
+  }
+
+  function updateAIControls() {
+    if (!aiSimulation) {
+      if (elements.aiToggleButton) {
+        elements.aiToggleButton.disabled = true;
+      }
+      if (elements.aiBotCountSlider) {
+        elements.aiBotCountSlider.disabled = true;
+      }
+      if (elements.aiDifficultySelect) {
+        elements.aiDifficultySelect.disabled = true;
+      }
+      updateAIStatus(false);
+      return;
+    }
+
+    const status = aiSimulation.getStatus();
+    const isLobby = currentPhase === 'lobby';
+
+    // Update toggle button
+    if (elements.aiToggleButton) {
+      elements.aiToggleButton.textContent = status.enabled ? 'Disable AI Bots' : 'Enable AI Bots';
+      elements.aiToggleButton.classList.toggle('active', status.enabled);
+
+      // Can only toggle AI in lobby phase or when disabling
+      elements.aiToggleButton.disabled = !isLobby && !status.enabled;
+    }
+
+    // Update slider and select - disabled when bots are active or not in lobby
+    if (elements.aiBotCountSlider) {
+      elements.aiBotCountSlider.disabled = status.enabled || !isLobby;
+    }
+    if (elements.aiDifficultySelect) {
+      elements.aiDifficultySelect.disabled = status.enabled || !isLobby;
+    }
+
+    updateAIStatus(status.enabled);
+  }
+
+  if (aiSimulation && elements.aiToggleButton) {
+    elements.aiToggleButton.addEventListener('click', () => {
+      const status = aiSimulation.getStatus();
+
+      if (status.enabled) {
+        aiSimulation.disable();
+        if (window.appCommon && window.appCommon.showToast) {
+          window.appCommon.showToast('AI bots disabled', 'info', 2000);
+        }
+      } else {
+        if (currentPhase === 'lobby') {
+          const botCount = parseInt(elements.aiBotCountSlider?.value || 5, 10);
+          const difficulty = elements.aiDifficultySelect?.value || 'medium';
+
+          const enabled = aiSimulation.enable({
+            count: botCount,
+            difficulty: difficulty
+          });
+
+          if (enabled && window.appCommon && window.appCommon.showToast) {
+            window.appCommon.showToast(`${botCount} AI bots enabled`, 'success', 2000);
+          }
+
+          if (!enabled && window.appCommon && window.appCommon.showToast) {
+            window.appCommon.showToast('Failed to enable AI bots', 'error', 2500);
+          }
+        }
+      }
+
+      updateAIControls();
+    });
+  }
+
+  if (elements.aiBotCountSlider && elements.aiBotCountValue) {
+    elements.aiBotCountSlider.addEventListener('input', (e) => {
+      const value = e.target.value;
+      elements.aiBotCountValue.textContent = value;
+
+      if (aiSimulation) {
+        aiSimulation.setBotCount(parseInt(value, 10));
+      }
+    });
+  }
+
+  if (elements.aiDifficultySelect && aiSimulation) {
+    elements.aiDifficultySelect.addEventListener('change', (e) => {
+      const difficulty = e.target.value;
+      aiSimulation.setDifficulty(difficulty);
+    });
+  }
+
+  // Update AI controls when phase changes
+  function onPhaseChange(newPhase) {
+    // Disable bots when returning to lobby from finished state (game restart)
+    // Don't disable if already in lobby or during initial join
+    if (currentPhase === 'finished' && newPhase === 'lobby' && aiSimulation) {
+      const status = aiSimulation.getStatus();
+      if (status.enabled) {
+        aiSimulation.disable();
+      }
+    }
+
+    previousPhase = currentPhase;
+    currentPhase = newPhase;
+    updateAIControls();
+  }
+
   initJoinInfo();
+  updateAIControls();
 })();

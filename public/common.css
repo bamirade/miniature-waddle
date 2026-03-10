@@ -79,6 +79,8 @@ h1 {
       opacity: 1;
       transform: translateY(0);
     }
+  }
+
 .text-input {
   width: 100%;
   min-height: 44px;
@@ -204,8 +206,17 @@ h1 {
   }
 
   /* Utility Classes */
+  .hidden {
+    display: none !important;
+  }
+
   .pulse {
     animation: pulse 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
   }
 
   .shake {
@@ -216,6 +227,49 @@ h1 {
     0%, 100% { transform: translateX(0); }
     25% { transform: translateX(-5px); }
     75% { transform: translateX(5px); }
+  }
+
+  /* Life Lost Notification */
+  .life-lost-notification {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    padding: 1.5rem 2rem;
+    background: rgba(255, 51, 102, 0.1);
+    border: 2px solid var(--error);
+    border-radius: 0;
+    color: var(--error);
+    font-size: 1.3rem;
+    font-weight: 600;
+    text-align: center;
+    z-index: 9999;
+    animation: lifeNotificationShow 0.4s ease-out, lifeNotificationHide 0.4s ease-out 0.6s forwards;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    box-shadow: 0 0 30px var(--error-glow);
+  }
+
+  @keyframes lifeNotificationShow {
+    from {
+      opacity: 0;
+      transform: translate(-50%, -50%) scale(0.5);
+    }
+    to {
+      opacity: 1;
+      transform: translate(-50%, -50%) scale(1);
+    }
+  }
+
+  @keyframes lifeNotificationHide {
+    from {
+      opacity: 1;
+      transform: translate(-50%, -50%) scale(1);
+    }
+    to {
+      opacity: 0;
+      transform: translate(-50%, -50%) scale(0.7);
+    }
   }
 
   /* Improved Focus States */
