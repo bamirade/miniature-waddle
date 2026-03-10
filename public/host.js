@@ -8,6 +8,8 @@
   let currentPhase = 'lobby';
   let lobbyData = null;
   let currentRound = null;
+  let flashTimerInterval = null;
+  let flashEndTime = null;
 
   const elements = {
     qrCode: document.getElementById('qr-code'),
@@ -25,7 +27,12 @@
     questionText: document.getElementById('question-text'),
     optionsDisplay: document.getElementById('options-display'),
     resultsCard: document.getElementById('results-card'),
-    podium: document.getElementById('podium')
+    podium: document.getElementById('podium'),
+    flashOverlay: document.getElementById('flash-overlay'),
+    flashQuestion: document.getElementById('flash-question'),
+    flashOptions: document.getElementById('flash-options'),
+    flashTimer: document.getElementById('flash-timer'),
+    flashRound: document.getElementById('flash-round')
   };
 
   function initJoinInfo() {
@@ -157,6 +164,126 @@
     }
   }
 
+  // Flash Overlay Management
+  function showFlashOverlay(question, roundNumber, endsAt, slotsLeft) {
+    if (!elements.flashOverlay || !question) return;
+
+    // Set round number
+    if (elements.flashRound) {
+      elements.flashRound.textContent = `Round ${roundNumber}`;
+    }
+
+    // Set question text
+    if (elements.flashQuestion) {
+      elements.flashQuestion.textContent = question.text || '';
+    }
+
+    // Render options
+    renderFlashOptions(question, slotsLeft);
+
+    // Start timer
+    if (endsAt) {
+      startFlashTimer(endsAt);
+    }
+
+    // Show overlay
+    elements.flashOverlay.classList.remove('hidden');
+  }
+
+  function hideFlashOverlay() {
+    if (elements.flashOverlay) {
+      elements.flashOverlay.classList.add('hidden');
+    }
+    stopFlashTimer();
+  }
+
+  function renderFlashOptions(question, slotsLeft) {
+    if (!elements.flashOptions || !question) return;
+
+    elements.flashOptions.innerHTML = '';
+
+    question.options.forEach((optionText, index) => {
+      const slots = slotsLeft ? slotsLeft[index] : 1;
+
+      const option = document.createElement('div');
+      option.className = 'flash-option';
+      option.setAttribute('data-option-index', index);
+
+      if (slots === 0) {
+        option.classList.add('full');
+      }
+
+      const label = document.createElement('div');
+      label.className = 'flash-option-label';
+      label.textContent = String.fromCharCode(65 + index);
+
+      const text = document.createElement('div');
+      text.className = 'flash-option-text';
+      text.textContent = optionText;
+
+      option.appendChild(label);
+      option.appendChild(text);
+
+      elements.flashOptions.appendChild(option);
+    });
+  }
+
+  function startFlashTimer(endsAt) {
+    if (!elements.flashTimer) return;
+
+    flashEndTime = endsAt;
+    elements.flashTimer.classList.remove('critical');
+
+    if (flashTimerInterval) {
+      clearInterval(flashTimerInterval);
+    }
+
+    flashTimerInterval = setInterval(() => {
+      if (!flashEndTime) {
+        clearInterval(flashTimerInterval);
+        return;
+      }
+
+      const now = Date.now();
+      const remaining = Math.max(0, Math.ceil((flashEndTime - now) / 1000));
+
+      if (elements.flashTimer) {
+        elements.flashTimer.textContent = `${remaining}s`;
+
+        if (remaining <= 3) {
+          elements.flashTimer.classList.add('critical');
+        }
+      }
+
+      if (remaining === 0) {
+        clearInterval(flashTimerInterval);
+        flashTimerInterval = null;
+      }
+    }, 100);
+  }
+
+  function stopFlashTimer() {
+    if (flashTimerInterval) {
+      clearInterval(flashTimerInterval);
+      flashTimerInterval = null;
+    }
+    flashEndTime = null;
+  }
+
+  function updateFlashOptions(slotsLeft) {
+    if (!elements.flashOptions || !currentRound || !currentRound.question) return;
+
+    const options = elements.flashOptions.querySelectorAll('.flash-option');
+    options.forEach((option, index) => {
+      const slots = slotsLeft ? slotsLeft[index] : 1;
+      if (slots === 0) {
+        option.classList.add('full');
+      } else {
+        option.classList.remove('full');
+      }
+    });
+  }
+
   function renderOptions(question, capacities, pickedCounts, slotsLeft) {
     if (!elements.optionsDisplay || !question) return;
 
@@ -167,6 +294,11 @@
       const picked = pickedCounts[index] || 0;
       const slots = slotsLeft[index] || 0;
       const percentage = capacity > 0 ? Math.round((picked / capacity) * 100) : 0;
+
+      // Hide options that are full (0 slots left)
+      if (slots === 0) {
+        return;
+      }
 
       const bar = document.createElement('div');
       bar.className = 'option-bar';
@@ -273,6 +405,7 @@
 
     if (phase === 'lobby') {
       currentPhase = 'lobby';
+      hideFlashOverlay();
       showCard(null);
       if (data.lobby) {
         updateStats(data.lobby);
@@ -281,6 +414,7 @@
       }
     } else if (phase === 'countdown') {
       currentPhase = 'countdown';
+      hideFlashOverlay();
       if (data.countdown && elements.countdownValue) {
         elements.countdownValue.textContent = data.countdown.secondsLeft || 3;
       }
@@ -304,6 +438,14 @@
           data.round.slotsLeft || [0, 0, 0, 0]
         );
 
+        // Show flash overlay
+        showFlashOverlay(
+          data.round.question,
+          data.round.roundNumber || 1,
+          data.round.endsAt,
+          data.round.slotsLeft || [0, 0, 0, 0]
+        );
+
         showCard('round');
       }
 
@@ -312,6 +454,7 @@
         renderPlayerList(data.lobby.players || []);
       }
     } else if (phase === 'reveal') {
+      hideFlashOverlay();
       if (currentRound && data.round) {
         renderOptions(
           data.round.question,
@@ -326,6 +469,7 @@
       }
     } else if (phase === 'finished') {
       currentPhase = 'finished';
+      hideFlashOverlay();
       if (data.results) {
         renderResults(data.results);
         showCard('results');
@@ -359,6 +503,14 @@
       data.slotsLeft || [0, 0, 0, 0]
     );
 
+    // Show flash overlay
+    showFlashOverlay(
+      data.question,
+      data.roundNumber || 1,
+      data.endsAt,
+      data.slotsLeft || [0, 0, 0, 0]
+    );
+
     showCard('round');
   });
 
@@ -372,7 +524,11 @@
         data.pickedCounts || [0, 0, 0, 0],
         data.slotsLeft || [0, 0, 0, 0]
       );
+
+      // Update flash overlay
+      updateFlashOptions(data.slotsLeft || [0, 0, 0, 0]);
     } else if (data.type === 'reveal') {
+      hideFlashOverlay();
       if (data.question) {
         currentRound.question = data.question;
       }
@@ -389,6 +545,7 @@
     if (!data) return;
 
     currentPhase = 'finished';
+    hideFlashOverlay();
     renderResults(data);
     showCard('results');
   });

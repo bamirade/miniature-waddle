@@ -11,6 +11,59 @@
         display: flex;
         flex-direction: column;
         background: var(--bg);
+        position: relative;
+      }
+
+      /* Connection Status Indicator */
+      .connection-status {
+        position: fixed;
+        top: 0.75rem;
+        right: 0.75rem;
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        padding: 0.4rem 0.7rem;
+        background: var(--surface-elevated);
+        border: 1px solid var(--border);
+        border-radius: 0;
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        z-index: 1000;
+        transition: all 0.3s ease;
+      }
+
+      .connection-status .status-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        animation: pulse 2s ease-in-out infinite;
+      }
+
+      .connection-status.connected .status-dot {
+        background: var(--success);
+        box-shadow: 0 0 4px var(--success-glow);
+      }
+
+      .connection-status.disconnected .status-dot {
+        background: var(--error);
+        box-shadow: 0 0 4px var(--error-glow);
+        animation: pulse-error 1s ease-in-out infinite;
+      }
+
+      .connection-status.connecting .status-dot {
+        background: var(--primary);
+        box-shadow: 0 0 4px var(--primary-glow);
+      }
+
+      @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.6; }
+      }
+
+      @keyframes pulse-error {
+        0%, 100% { opacity: 1; transform: scale(1); }
+        50% { opacity: 0.7; transform: scale(1.2); }
       }
 
       .student-page main {
@@ -35,39 +88,69 @@
         padding: 1rem;
       }
 
+      #phase-round {
+        width: 100%;
+      }
+
+      #phase-round .options-grid {
+        max-width: 600px;
+        width: 100%;
+        margin: 0 auto;
+      }
+
       .lobby-info {
-        padding: 1rem;
+        padding: 1.5rem;
         background: var(--surface);
         border: 1px solid var(--border);
-        border-radius: 10px;
+        border-radius: 0;
+      }
+
+      .loading-spinner {
+        width: 32px;
+        height: 32px;
+        border: 2px solid var(--border);
+        border-top-color: var(--primary);
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+        margin: 1rem auto;
+      }
+
+      @keyframes spin {
+        to { transform: rotate(360deg); }
       }
 
       .countdown-display {
-        font-size: 4rem;
-        font-weight: 700;
+        font-size: 6rem;
+        font-weight: 100;
         color: var(--primary);
         margin: 1rem 0;
+        font-variant-numeric: tabular-nums;
+        text-shadow: 0 0 30px var(--primary-glow);
+        line-height: 1;
       }
 
       .question-card {
         width: 100%;
         background: var(--surface);
         border: 1px solid var(--border);
-        border-radius: 10px;
+        border-radius: 0;
         padding: 1rem;
         margin-bottom: 1rem;
+        display: none;
       }
 
       .question-text {
         font-size: 1.15rem;
-        font-weight: 600;
+        font-weight: 400;
         margin: 0;
+        letter-spacing: -0.01em;
       }
 
       .options-grid {
         display: grid;
         gap: 0.75rem;
         margin-top: 1rem;
+        width: 100%;
       }
 
       .option-button {
@@ -77,35 +160,103 @@
         align-items: center;
         gap: 0.7rem;
         padding: 0.75rem 1rem;
-        border: 2px solid var(--border);
-        border-radius: 10px;
-        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 0;
+        background: var(--surface-elevated);
         text-align: left;
         font-size: 1rem;
         color: var(--text);
         cursor: pointer;
-        transition: all 0.15s;
+        transition: all 0.15s ease;
+        animation: slideIn 0.2s ease-out;
+        position: relative;
+        /* Better touch targets for mobile */
+        -webkit-tap-highlight-color: transparent;
+        user-select: none;
+      }
+
+      /* Ensure minimum touch target size (44x44px per WCAG) */
+      @media (pointer: coarse) {
+        .option-button {
+          min-height: 56px;
+          padding: 0.85rem 1rem;
+        }
+      }
+
+      @keyframes slideIn {
+        from {
+          opacity: 0;
+          transform: translateX(-10px);
+        }
+        to {
+          opacity: 1;
+          transform: translateX(0);
+        }
+      }
+
+      .option-button:hover:not(:disabled) {
+        border-color: var(--primary);
+        box-shadow: 0 0 0 1px var(--primary), 0 0 12px var(--primary-glow);
+        transform: translateY(-2px);
       }
 
       .option-button:active:not(:disabled) {
-        transform: scale(0.97);
-        background: #f9fafb;
+        transform: scale(0.98) translateY(0);
+        background: var(--primary-glow);
+      }
+
+      .option-button.urgent {
+        animation: urgentPulse 1.5s ease-in-out infinite;
+      }
+
+      @keyframes urgentPulse {
+        0%, 100% {
+          border-color: var(--error);
+          box-shadow: 0 0 0 0 var(--error-glow);
+        }
+        50% {
+          border-color: var(--error);
+          box-shadow: 0 0 0 4px var(--error-glow);
+        }
       }
 
       .option-button:disabled {
-        opacity: 0.5;
+        opacity: 0.4;
         cursor: not-allowed;
       }
 
       .option-button.picked {
-        border-color: var(--primary);
-        background: rgba(37, 99, 235, 0.05);
+        border-color: var(--success);
+        background: var(--success-glow);
+        box-shadow: 0 0 0 1px var(--success), inset 0 0 20px var(--success-glow);
+        pointer-events: none;
+      }
+
+      .option-button.picked::after {
+        content: '✓';
+        position: absolute;
+        right: 1rem;
+        font-size: 1.5rem;
+        color: var(--success);
+        animation: checkmark 0.3s ease-out;
+      }
+
+      @keyframes checkmark {
+        from {
+          opacity: 0;
+          transform: scale(0) rotate(-45deg);
+        }
+        to {
+          opacity: 1;
+          transform: scale(1) rotate(0deg);
+        }
       }
 
       .option-label {
-        font-weight: 700;
-        font-size: 1.1rem;
+        font-weight: 500;
+        font-size: 1rem;
         color: var(--primary);
+        min-width: 1.5rem;
       }
 
       .option-text {
@@ -113,38 +264,85 @@
       }
 
       .option-slots {
-        font-size: 0.85rem;
-        font-weight: 600;
+        font-size: 0.8rem;
+        font-weight: 500;
         color: var(--muted);
         white-space: nowrap;
+        font-variant-numeric: tabular-nums;
       }
 
       .option-slots.low {
         color: var(--error);
+        font-weight: 600;
+      }
+
+      /* Round Timer */
+      .round-timer {
+        position: fixed;
+        top: 0.75rem;
+        left: 0.75rem;
+        padding: 0.4rem 0.7rem;
+        background: var(--surface-elevated);
+        border: 1px solid var(--border);
+        border-radius: 0;
+        font-size: 0.85rem;
+        font-variant-numeric: tabular-nums;
+        z-index: 1000;
+        font-weight: 500;
+        letter-spacing: 0.02em;
+      }
+
+      .round-timer.critical {
+        color: var(--error);
+        border-color: var(--error);
+        animation: timerPulse 1s ease-in-out infinite;
+      }
+
+      @keyframes timerPulse {
+        0%, 100% { transform: scale(1); }
+        50% { transform: scale(1.05); }
+      }
+
+      /* Empty State */
+      .empty-state {
+        padding: 2rem 1rem;
+        text-align: center;
+        color: var(--muted);
+      }
+
+      .empty-state-icon {
+        font-size: 2rem;
+        margin-bottom: 0.5rem;
+        opacity: 0.5;
       }
 
       .pick-status {
         padding: 1rem;
         background: var(--surface);
-        border: 1px solid var(--border);
-        border-radius: 10px;
-        font-weight: 600;
+        border: 1px solid var(--primary);
+        border-radius: 0;
+        font-weight: 500;
         color: var(--primary);
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        font-size: 0.9rem;
       }
 
       .eliminated-banner {
         padding: 2rem 1rem;
-        background: rgba(185, 28, 28, 0.1);
-        border: 2px solid var(--error);
-        border-radius: 12px;
+        background: rgba(255, 51, 102, 0.05);
+        border: 1px solid var(--error);
+        border-radius: 0;
         text-align: center;
       }
 
       .eliminated-title {
-        font-size: 2rem;
-        font-weight: 700;
+        font-size: 2.5rem;
+        font-weight: 300;
         color: var(--error);
         margin: 0 0 0.5rem;
+        letter-spacing: 0.15em;
+        text-shadow: 0 0 20px var(--error-glow);
       }
 
       .eliminated-reason {
@@ -157,15 +355,17 @@
         width: 100%;
         background: var(--surface);
         border: 1px solid var(--border);
-        border-radius: 10px;
+        border-radius: 0;
         padding: 1rem;
       }
 
       .results-title {
         font-size: 1.5rem;
-        font-weight: 700;
+        font-weight: 300;
         margin: 0 0 1rem;
         text-align: center;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
       }
 
       .leaderboard-entry {
@@ -181,16 +381,19 @@
       }
 
       .leaderboard-entry.me {
-        background: rgba(37, 99, 235, 0.05);
-        border-radius: 6px;
-        font-weight: 600;
+        background: var(--primary-glow);
+        border-radius: 0;
+        font-weight: 500;
+        border: 1px solid var(--primary);
+        margin: -1px;
       }
 
       .rank-badge {
-        font-weight: 700;
+        font-weight: 500;
         font-size: 1rem;
         color: var(--primary);
         min-width: 2rem;
+        font-variant-numeric: tabular-nums;
       }
 
       .player-name {
@@ -208,6 +411,15 @@
     </style>
   </head>
   <body class="student-page">
+    <!-- Connection Status Indicator -->
+    <div class="connection-status connecting" id="connection-status">
+      <div class="status-dot"></div>
+      <span id="connection-text">Connecting...</span>
+    </div>
+
+    <!-- Round Timer -->
+    <div class="round-timer hidden" id="round-timer">--</div>
+
     <main>
       <div id="phase-lobby" class="phase-container hidden">
         <div class="lobby-info">
@@ -227,6 +439,9 @@
           <p id="round-number" class="muted" style="margin: 0 0 0.5rem; font-size: 0.9rem;">Round 1</p>
           <p id="question-text" class="question-text">Question text</p>
         </div>
+        <h2 style="margin-bottom: 1.5rem; font-weight: 300; letter-spacing: 0.05em; text-transform: uppercase; font-size: 1rem; color: var(--muted);">
+          Pick Your Answer
+        </h2>
         <div id="options-container" class="options-grid">
           <!-- Options will be rendered here -->
         </div>

@@ -31,7 +31,25 @@
 
     function setError(message) {
       errorEl.textContent = message || '';
+      if (message) {
+        input.classList.add('shake');
+        setTimeout(() => input.classList.remove('shake'), 500);
+      }
     }
+
+    // Real-time validation feedback
+    input.addEventListener('input', () => {
+      const nickname = normalizeNickname(input.value);
+      if (nickname.length > 0 && !isValidNickname(nickname)) {
+        if (nickname.length < MIN_NICKNAME_LENGTH) {
+          setError(`At least ${MIN_NICKNAME_LENGTH} characters required`);
+        } else if (nickname.length > MAX_NICKNAME_LENGTH) {
+          setError(`Maximum ${MAX_NICKNAME_LENGTH} characters`);
+        }
+      } else {
+        setError('');
+      }
+    });
 
     form.addEventListener('submit', (event) => {
       event.preventDefault();
@@ -47,6 +65,10 @@
       input.value = nickname;
       window.localStorage.setItem('nickname', nickname);
 
+      // Show loading state
+      button.disabled = true;
+      button.textContent = 'Joining...';
+
       // Redirect to student page - it will handle the socket connection and joining
       window.location.assign(STUDENT_ROUTE);
     });
@@ -55,8 +77,55 @@
   window.appCommon = {
     version: '0.2.0',
     normalizeNickname,
-    isValidNickname
+    isValidNickname,
+    showToast
   };
+
+  // Toast Notification System
+  let toastContainer = null;
+
+  function showToast(message, type = 'info', duration = 3000) {
+    if (!toastContainer) {
+      toastContainer = document.createElement('div');
+      toastContainer.className = 'toast-container';
+      document.body.appendChild(toastContainer);
+    }
+
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    toast.textContent = message;
+    toast.setAttribute('role', 'status');
+    toast.setAttribute('aria-live', 'polite');
+
+    toastContainer.appendChild(toast);
+
+    // Auto-dismiss after duration
+    setTimeout(() => {
+      toast.classList.add('hiding');
+      setTimeout(() => {
+        if (toast.parentNode) {
+          toast.parentNode.removeChild(toast);
+        }
+        // Clean up container if empty
+        if (toastContainer && toastContainer.children.length === 0) {
+          toastContainer.remove();
+          toastContainer = null;
+        }
+      }, 300);
+    }, duration);
+
+    // Allow manual dismiss by clicking
+    toast.addEventListener('click', () => {
+      toast.classList.add('hiding');
+      setTimeout(() => {
+        if (toast.parentNode) {
+          toast.parentNode.removeChild(toast);
+        }
+      }, 300);
+    });
+
+    return toast;
+  }
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', initJoinPage);
