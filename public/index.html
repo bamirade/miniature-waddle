@@ -6,11 +6,18 @@
     <title>Join Classroom Game</title>
     <link rel="stylesheet" href="/common.css" />
   </head>
-  <body class="join-page">
+  <body class="join-page app-shell">
     <main>
       <section class="join-card" aria-labelledby="join-title">
+        <p class="join-kicker">Classroom Quick Match</p>
         <h1 id="join-title">Join the Game</h1>
         <p class="muted join-subtitle">Enter your nickname to play on this device.</p>
+
+        <div class="join-benefits" aria-hidden="true">
+          <span class="join-benefit-chip">Fast rounds</span>
+          <span class="join-benefit-chip">Limited slots</span>
+          <span class="join-benefit-chip">Live leaderboard</span>
+        </div>
 
         <form id="join-form" class="join-form" novalidate>
           <label class="field-label" for="nickname">Nickname</label>
@@ -29,6 +36,7 @@
 
           <button id="join-button" class="primary-button" type="submit">Join</button>
         </form>
+        <p class="join-note">Tip: keep this tab open after joining so you do not lose your seat.</p>
       </section>
     </main>
     <script src="/socket.io/socket.io.js"></script>

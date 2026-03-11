@@ -10,44 +10,63 @@
         min-height: 100svh;
         display: flex;
         flex-direction: column;
-        background: var(--bg);
+        background:
+          radial-gradient(circle at 12% -12%, rgba(0, 111, 143, 0.2), transparent 44%),
+          radial-gradient(circle at 90% -8%, rgba(192, 139, 47, 0.18), transparent 36%),
+          linear-gradient(180deg, #f8f2e5 0%, #f1e7d6 54%, #e9dcc8 100%);
         position: relative;
+      }
+
+      .student-hud {
+        position: fixed;
+        top: 0.55rem;
+        left: 0.55rem;
+        right: 0.55rem;
+        display: grid;
+        grid-template-columns: auto 1fr auto;
+        gap: 0.45rem;
+        align-items: center;
+        z-index: var(--z-hud);
+        pointer-events: none;
+      }
+
+      .student-hud > * {
+        pointer-events: auto;
       }
 
       /* Connection Status Indicator */
       .connection-status {
-        position: fixed;
-        top: 0.75rem;
-        right: 0.75rem;
+        position: static;
+        justify-self: end;
         display: flex;
         align-items: center;
         gap: 0.4rem;
-        padding: 0.4rem 0.7rem;
-        background: var(--surface-elevated);
+        padding: 0.42rem 0.75rem;
+        background: rgba(255, 255, 255, 0.82);
         border: 1px solid var(--border);
         border-radius: 0;
-        font-size: 0.75rem;
+        font-size: 0.7rem;
         text-transform: uppercase;
-        letter-spacing: 0.05em;
-        z-index: 1000;
-        transition: all 0.3s ease;
+        letter-spacing: 0.09em;
+        z-index: var(--z-hud);
+        transition: all var(--duration-slow) var(--easing-in-out);
+        backdrop-filter: blur(4px);
       }
 
       /* Lives Display */
       .lives-display {
-        position: fixed;
-        top: 0.75rem;
-        left: 50%;
-        transform: translateX(-50%);
+        position: static;
+        justify-self: center;
         display: flex;
         align-items: center;
         gap: 0.4rem;
-        padding: 0.5rem 0.9rem;
-        background: var(--surface-elevated);
+        padding: 0.5rem 0.95rem;
+        background: rgba(255, 255, 255, 0.86);
         border: 1px solid var(--border);
         border-radius: 0;
-        z-index: 1000;
-        transition: all 0.3s ease;
+        z-index: var(--z-hud);
+        transition: all var(--duration-slow) var(--easing-in-out);
+        backdrop-filter: blur(4px);
       }
 
       .lives-display .heart {
@@ -76,9 +95,9 @@
       }
 
       @keyframes shake {
-        0%, 100% { transform: translateX(-50%) translateY(0); }
-        10%, 30%, 50%, 70%, 90% { transform: translateX(-50%) translateY(-5px); }
-        20%, 40%, 60%, 80% { transform: translateX(-50%) translateY(5px); }
+        0%, 100% { transform: translateY(0); }
+        10%, 30%, 50%, 70%, 90% { transform: translateY(-5px); }
+        20%, 40%, 60%, 80% { transform: translateY(5px); }
       }
 
       .connection-status .status-dot {
@@ -116,14 +135,51 @@
 
       .student-page main {
         flex: 1;
-        max-width: 600px;
+        max-width: 640px;
         margin: 0 auto;
         width: 100%;
-        padding: 1rem;
+        padding: clamp(5.9rem, 16vh, 7.2rem) 0.9rem 1rem;
         display: flex;
         flex-direction: column;
         border: 0;
         background: transparent;
+      }
+
+      .phase-indicator {
+        width: fit-content;
+        margin: 0 auto 0.65rem;
+        padding: 0.22rem 0.68rem;
+        border: 1px solid var(--border);
+        background: rgba(255, 255, 255, 0.62);
+        color: var(--muted);
+        text-transform: uppercase;
+        font-size: 0.68rem;
+        letter-spacing: 0.12em;
+      }
+
+      .phase-indicator[data-state='countdown'] {
+        border-color: var(--primary);
+        color: var(--primary);
+      }
+
+      .phase-indicator[data-state='round'] {
+        border-color: var(--success);
+        color: var(--success);
+      }
+
+      .phase-indicator[data-state='reveal'] {
+        border-color: var(--border-bright);
+        color: var(--text);
+      }
+
+      .phase-indicator[data-state='eliminated'] {
+        border-color: var(--error);
+        color: var(--error);
+      }
+
+      .phase-indicator[data-state='results'] {
+        border-color: var(--primary);
+        color: var(--text);
       }
 
       .phase-container {
@@ -138,6 +194,7 @@
 
       #phase-round {
         width: 100%;
+        justify-content: flex-start;
       }
 
       #phase-round .options-grid {
@@ -147,8 +204,8 @@
       }
 
       .lobby-info {
-        padding: 1.5rem;
-        background: var(--surface);
+        padding: 1.35rem;
+        background: linear-gradient(150deg, rgba(255, 255, 255, 0.96), rgba(249, 242, 229, 0.95));
         border: 1px solid var(--border);
         border-radius: 0;
       }
@@ -179,43 +236,63 @@
 
       .question-card {
         width: 100%;
-        background: var(--surface);
+        background: linear-gradient(155deg, rgba(255, 255, 255, 0.97), rgba(250, 244, 232, 0.95));
         border: 1px solid var(--border);
+        border-left: 3px solid var(--primary);
         border-radius: 0;
-        padding: 1rem;
-        margin-bottom: 1rem;
-        display: none;
+        padding: 1rem 0.95rem;
+        margin-bottom: 0.75rem;
+        display: block;
+        text-align: left;
+        box-shadow: 0 10px 24px rgba(0, 0, 0, 0.25);
+      }
+
+      #round-number {
+        margin: 0 0 0.45rem;
+        font-size: 0.78rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
       }
 
       .question-text {
-        font-size: 1.15rem;
-        font-weight: 400;
+        font-size: clamp(1.12rem, 4.2vw, 1.45rem);
+        font-weight: 430;
         margin: 0;
         letter-spacing: -0.01em;
+        line-height: 1.25;
+      }
+
+      .round-phase-title {
+        margin: 0 0 0.7rem;
+        font-weight: 500;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        font-size: 0.74rem;
+        color: var(--muted);
       }
 
       .options-grid {
         display: grid;
-        gap: 0.75rem;
-        margin-top: 1rem;
+        gap: 0.6rem;
+        margin-top: 0.45rem;
         width: 100%;
       }
 
       .option-button {
-        min-height: 72px;
+        min-height: 76px;
         display: grid;
         grid-template-columns: auto 1fr auto;
         align-items: center;
-        gap: 0.7rem;
-        padding: 0.75rem 1rem;
+        gap: 0.68rem;
+        padding: 0.78rem 0.95rem;
         border: 1px solid var(--border);
         border-radius: 0;
-        background: var(--surface-elevated);
+        background: linear-gradient(160deg, rgba(255, 255, 255, 0.96), rgba(248, 241, 227, 0.94));
         text-align: left;
         font-size: 1rem;
         color: var(--text);
         cursor: pointer;
-        transition: all 0.15s ease;
+        transition: all var(--duration-fast) var(--easing-in-out);
         animation: slideIn 0.2s ease-out;
         position: relative;
         /* Better touch targets for mobile */
@@ -226,7 +303,7 @@
       /* Ensure minimum touch target size (44x44px per WCAG) */
       @media (pointer: coarse) {
         .option-button {
-          min-height: 56px;
+          min-height: 64px;
           padding: 0.85rem 1rem;
         }
       }
@@ -269,13 +346,13 @@
       }
 
       .option-button:disabled {
-        opacity: 0.4;
+        opacity: 0.46;
         cursor: not-allowed;
       }
 
       .option-button.picked {
         border-color: var(--success);
-        background: var(--success-glow);
+        background: linear-gradient(155deg, rgba(0, 255, 136, 0.16), rgba(0, 255, 136, 0.05));
         box-shadow: 0 0 0 1px var(--success), inset 0 0 20px var(--success-glow);
         pointer-events: none;
       }
@@ -301,8 +378,8 @@
       }
 
       .option-label {
-        font-weight: 500;
-        font-size: 1rem;
+        font-weight: 600;
+        font-size: 0.96rem;
         color: var(--primary);
         min-width: 1.5rem;
       }
@@ -312,7 +389,7 @@
       }
 
       .option-slots {
-        font-size: 0.8rem;
+        font-size: 0.75rem;
         font-weight: 500;
         color: var(--muted);
         white-space: nowrap;
@@ -326,18 +403,42 @@
 
       /* Round Timer */
       .round-timer {
-        position: fixed;
-        top: 0.75rem;
-        left: 0.75rem;
-        padding: 0.4rem 0.7rem;
-        background: var(--surface-elevated);
+        position: static;
+        justify-self: start;
+        padding: 0.42rem 0.72rem;
+        background: rgba(255, 255, 255, 0.88);
         border: 1px solid var(--border);
         border-radius: 0;
-        font-size: 0.85rem;
+        font-size: 0.84rem;
         font-variant-numeric: tabular-nums;
-        z-index: 1000;
-        font-weight: 500;
-        letter-spacing: 0.02em;
+        font-weight: 600;
+        letter-spacing: 0.05em;
+      }
+
+      @media (max-width: 520px) {
+        .student-hud {
+          grid-template-columns: 1fr 1fr;
+          grid-template-areas:
+            "timer connection"
+            "lives lives";
+          gap: 0.4rem;
+        }
+
+        .round-timer {
+          grid-area: timer;
+        }
+
+        .connection-status {
+          grid-area: connection;
+        }
+
+        .lives-display {
+          grid-area: lives;
+        }
+
+        .student-page main {
+          padding-top: clamp(8rem, 25vh, 9.15rem);
+        }
       }
 
       .round-timer.critical {
@@ -365,19 +466,27 @@
       }
 
       .pick-status {
-        padding: 1rem;
-        background: var(--surface);
-        border: 1px solid var(--primary);
+        width: min(100%, 600px);
+        margin-top: 0.75rem;
+        padding: 0.85rem;
+        background: rgba(234, 248, 238, 0.86);
+        border: 1px solid var(--success);
         border-radius: 0;
-        font-weight: 500;
-        color: var(--primary);
+        font-weight: 600;
+        color: var(--success);
         text-transform: uppercase;
-        letter-spacing: 0.1em;
-        font-size: 0.9rem;
+        letter-spacing: 0.08em;
+        font-size: 0.78rem;
+      }
+
+      .pick-status[data-state="reveal"] {
+        border-color: var(--border-bright);
+        color: var(--text);
+        background: rgba(249, 242, 228, 0.92);
       }
 
       .eliminated-banner {
-        padding: 2rem 1rem;
+        padding: 1.65rem 1rem;
         background: rgba(255, 51, 102, 0.05);
         border: 1px solid var(--error);
         border-radius: 0;
@@ -400,7 +509,7 @@
       }
 
       .eliminated-title {
-        font-size: 2.5rem;
+        font-size: clamp(1.75rem, 8vw, 2.4rem);
         font-weight: 300;
         color: var(--error);
         margin: 0 0 0.5rem;
@@ -437,7 +546,7 @@
         font-size: 2rem;
         font-weight: 300;
         letter-spacing: 0.1em;
-        z-index: 2000;
+        z-index: var(--z-notification);
         box-shadow: 0 0 40px var(--error-glow);
         animation: lifeLostPop 1s ease-out forwards;
         pointer-events: none;
@@ -470,18 +579,18 @@
 
       .results-card {
         width: 100%;
-        background: var(--surface);
+        background: linear-gradient(155deg, rgba(255, 255, 255, 0.97), rgba(250, 244, 232, 0.94));
         border: 1px solid var(--border);
         border-radius: 0;
-        padding: 1rem;
+        padding: 0.95rem;
       }
 
       .results-title {
-        font-size: 1.5rem;
-        font-weight: 300;
-        margin: 0 0 1rem;
+        font-size: 1.22rem;
+        font-weight: 500;
+        margin: 0 0 0.85rem;
         text-align: center;
-        letter-spacing: 0.05em;
+        letter-spacing: 0.08em;
         text-transform: uppercase;
       }
 
@@ -489,7 +598,7 @@
         display: flex;
         align-items: center;
         gap: 0.75rem;
-        padding: 0.65rem;
+        padding: 0.62rem;
         border-bottom: 1px solid var(--border);
       }
 
@@ -518,71 +627,81 @@
       }
 
       .player-status {
-        font-size: 0.85rem;
+        font-size: 0.8rem;
         color: var(--muted);
       }
 
-      .hidden {
-        display: none !important;
+      :root[data-phase='reveal'] #phase-round .question-card {
+        border-left-color: var(--border-bright);
       }
+
+      :root[data-phase='eliminated'] .phase-indicator,
+      :root[data-phase='results'] .phase-indicator {
+        opacity: 0.86;
+      }
+
     </style>
   </head>
-  <body class="student-page">
-    <!-- Connection Status Indicator -->
-    <div class="connection-status connecting" id="connection-status">
-      <div class="status-dot"></div>
-      <span id="connection-text">Connecting...</span>
-    </div>
+  <body class="student-page app-shell">
+    <div class="student-hud" aria-label="Live game status">
+      <!-- Connection Status Indicator -->
+      <div class="connection-status connecting hud-chip" id="connection-status" role="status" aria-live="polite" aria-atomic="true">
+        <div class="status-dot"></div>
+        <span id="connection-text">Connecting</span>
+      </div>
 
-    <!-- Lives Display -->
-    <div class="lives-display hidden" id="lives-display">
-      <span class="heart" data-life="1">❤️</span>
-      <span class="heart" data-life="2">❤️</span>
-      <span class="heart" data-life="3">❤️</span>
-    </div>
+      <!-- Lives Display -->
+      <div class="lives-display hidden hud-chip" id="lives-display" role="status" aria-live="polite" aria-atomic="true" aria-label="3 lives remaining">
+        <span class="heart" data-life="1" aria-hidden="true">❤️</span>
+        <span class="heart" data-life="2" aria-hidden="true">❤️</span>
+        <span class="heart" data-life="3" aria-hidden="true">❤️</span>
+        <span id="lives-text" class="sr-only">3 lives remaining</span>
+      </div>
 
-    <!-- Round Timer -->
-    <div class="round-timer hidden" id="round-timer">--</div>
+      <!-- Round Timer -->
+      <div class="round-timer hidden hud-chip" id="round-timer" role="timer" aria-live="off" aria-label="Time remaining: -- seconds">--</div>
+    </div>
 
     <main>
+      <div id="phase-announcer" class="sr-only" aria-live="assertive" aria-atomic="true"></div>
+      <div id="phase-indicator" class="phase-indicator" role="status" aria-live="polite" aria-atomic="true" data-state="lobby">Lobby</div>
+
       <div id="phase-lobby" class="phase-container hidden">
         <div class="lobby-info">
-          <h2>Waiting for Game</h2>
-          <p class="muted">Host will start soon</p>
+          <h2>You're connected</h2>
+          <p class="muted">Keep this screen open and watch the host countdown.</p>
           <p id="lobby-player-count" class="muted"></p>
         </div>
       </div>
 
       <div id="phase-countdown" class="phase-container hidden">
-        <h2>Get Ready!</h2>
+        <h2>Round starts in</h2>
         <div id="countdown-value" class="countdown-display">3</div>
       </div>
 
       <div id="phase-round" class="phase-container hidden">
         <div class="question-card">
-          <p id="round-number" class="muted" style="margin: 0 0 0.5rem; font-size: 0.9rem;">Round 1</p>
+          <p id="round-number" class="muted">Round 1</p>
           <p id="question-text" class="question-text">Question text</p>
         </div>
-        <h2 style="margin-bottom: 1.5rem; font-weight: 300; letter-spacing: 0.05em; text-transform: uppercase; font-size: 1rem; color: var(--muted);">
-          Pick Your Answer
-        </h2>
+        <h2 class="round-phase-title">Tap before slots fill</h2>
         <div id="options-container" class="options-grid">
           <!-- Options will be rendered here -->
         </div>
-        <div id="pick-status" class="pick-status hidden">Locked in!</div>
+        <div id="pick-status" class="pick-status hidden" data-state="locked" role="status" aria-live="polite">Answer locked. Waiting for reveal.</div>
       </div>
 
       <div id="phase-eliminated" class="phase-container hidden">
         <div class="eliminated-banner">
-          <h2 class="eliminated-title">ELIMINATED</h2>
+          <h2 class="eliminated-title">YOU ARE ELIMINATED</h2>
           <p id="elimination-reason" class="eliminated-reason">You were eliminated</p>
         </div>
-        <p class="muted" style="margin-top: 1rem;">Waiting for game to finish...</p>
+        <p class="muted" style="margin-top: 1rem;">Watch the host screen for final standings.</p>
       </div>
 
       <div id="phase-results" class="phase-container hidden">
         <div class="results-card">
-          <h2 class="results-title">Game Over!</h2>
+          <h2 class="results-title">Final standings</h2>
           <div id="results-leaderboard">
             <!-- Leaderboard entries here -->
           </div>

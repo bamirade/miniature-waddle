@@ -32,7 +32,9 @@ If using the portable version from `dist/win-unpacked/`:
 1. **Start the Application**
    - Launch "Game Host" from Start Menu or run `Game Host.exe`
    - The host interface will open automatically
-   - A server will start on port 3000
+   - By default, the server attempts port `3000`
+   - If `3000` is occupied and `PORT` is unset, it auto-falls back to a free port and prints the final join URL
+   - If `PORT` is explicitly set to an occupied port, startup exits with remediation text
 
 2. **Configure Firewall (if prompted)**
    - On first run, you may see a firewall configuration prompt
@@ -53,7 +55,7 @@ If using the portable version from `dist/win-unpacked/`:
 ## Network Requirements
 
 - Host computer and student devices must be on the same local network (WiFi/LAN)
-- Port 3000 must be accessible (firewall rules are set up automatically)
+- The selected startup port (default `3000` or logged fallback port) must be accessible
 - No internet connection required
 
 ## Troubleshooting
@@ -79,6 +81,21 @@ See [FIREWALL.md](FIREWALL.md) for detailed troubleshooting steps:
 - Close unnecessary applications
 - Ensure good WiFi signal strength for all devices
 - Reduce number of concurrent players if needed
+
+### Port Conflict Behavior
+
+- If `PORT` is unset and port `3000` is occupied, the app starts on a free fallback port.
+- If `PORT` is explicitly set and occupied, startup exits non-zero with remediation text.
+
+Examples:
+
+```bash
+PORT=3001 npm start
+```
+
+```cmd
+set PORT=3001 && npm start
+```
 
 ## Building from Source
 
@@ -139,8 +156,33 @@ The executable will be created in the `dist/` folder:
 
 - `npm start` - Run server in Node.js (development)
 - `npm run electron` - Run as Electron app
+- `npm run smoke` - Run automated smoke suite (validates core game flow)
 - `npm run build` - Build Windows executable (64-bit)
 - `npm run build:all` - Build for both 32-bit and 64-bit
+
+## Smoke Testing
+
+Run `npm run smoke` to verify the server and core game flow on the current machine before a release or after any code change:
+
+```bash
+npm run smoke
+```
+
+**Expected output:**
+```
+Running smoke suite with isolated server instances...
+- occupiedDefaultPort ... PASS (250ms)
+- coreFlow ... PASS (300ms)
+- browserConsoleFlow ... PASS (900ms)
+
+Smoke summary: 3/3 passed
+```
+
+The suite validates startup fallback behavior when default port `3000` is occupied, checks core game flow payload integrity, and runs host/student scripts in a browser-like runtime to fail on blocking console/runtime errors. It exits non-zero on failure and does not require Electron or a display.
+
+**Troubleshooting:**
+- If the suite hangs, check for orphaned `node` processes from a previous failed run.
+- Building on Linux/Mac for Windows requires Wine; a missing Wine installation is not an application regression.
 
 ## Firewall Configuration
 

@@ -15,6 +15,10 @@
   let currentSlotsLeft = [0, 0, 0, 0];
   let roundEndTime = null;
   let timerInterval = null;
+  let lastAnnouncement = '';
+
+  const LOCKED_IN_COPY = 'Answer locked. Waiting for reveal.';
+  const REVEAL_WAIT_COPY = 'Checking answers...';
 
   // Prevent accidental navigation during active game
   window.addEventListener('beforeunload', (e) => {
@@ -45,8 +49,11 @@
     resultsLeaderboard: document.getElementById('results-leaderboard'),
     connectionStatus: document.getElementById('connection-status'),
     connectionText: document.getElementById('connection-text'),
+    phaseAnnouncer: document.getElementById('phase-announcer'),
+    phaseIndicator: document.getElementById('phase-indicator'),
     roundTimer: document.getElementById('round-timer'),
-    livesDisplay: document.getElementById('lives-display')
+    livesDisplay: document.getElementById('lives-display'),
+    livesText: document.getElementById('lives-text')
   };
 
   // Connection Status Management
@@ -56,12 +63,65 @@
     elements.connectionStatus.className = `connection-status ${status}`;
 
     const statusText = {
-      connecting: 'Connecting...',
-      connected: 'Live',
-      disconnected: 'Disconnected'
+      connecting: 'Connecting',
+      connected: 'Connected',
+      disconnected: 'Offline'
     }[status] || 'Unknown';
 
     elements.connectionText.textContent = statusText;
+    elements.connectionStatus.setAttribute('aria-label', `Connection status: ${statusText}`);
+  }
+
+  function announcePhaseMessage(message) {
+    if (!elements.phaseAnnouncer || !message || message === lastAnnouncement) {
+      return;
+    }
+
+    lastAnnouncement = message;
+    elements.phaseAnnouncer.textContent = message;
+  }
+
+  function setCurrentPhase(phaseName) {
+    currentPhase = phaseName;
+
+    const indicatorLabel = {
+      lobby: 'Lobby',
+      countdown: 'Countdown',
+      round: 'Choose Now',
+      reveal: 'Reveal',
+      eliminated: 'Eliminated',
+      results: 'Final Standings'
+    }[phaseName] || 'Live';
+
+    if (elements.phaseIndicator) {
+      elements.phaseIndicator.textContent = indicatorLabel;
+      elements.phaseIndicator.dataset.state = phaseName;
+    }
+
+    const message = {
+      lobby: "You're in the lobby. Keep this screen open. Round starts on host countdown.",
+      countdown: 'Round starts in.',
+      round: 'Choose before slots fill.',
+      reveal: REVEAL_WAIT_COPY,
+      eliminated: 'You have been eliminated. Waiting for final standings.',
+      results: 'Final standings.'
+    }[phaseName];
+
+    announcePhaseMessage(message);
+  }
+
+  function setPickStatus(message, visible, state = 'locked') {
+    if (!elements.pickStatus) {
+      return;
+    }
+
+    elements.pickStatus.textContent = message;
+    elements.pickStatus.dataset.state = state;
+    elements.pickStatus.classList.toggle('hidden', !visible);
+  }
+
+  function resetPickStatus() {
+    setPickStatus(LOCKED_IN_COPY, false, 'locked');
   }
 
   // Round Timer Management
@@ -75,6 +135,10 @@
       clearInterval(timerInterval);
     }
 
+    const initialRemaining = Math.max(0, Math.ceil((roundEndTime - Date.now()) / 1000));
+    elements.roundTimer.textContent = `${initialRemaining}s`;
+    elements.roundTimer.setAttribute('aria-label', `Time remaining: ${initialRemaining} seconds`);
+
     timerInterval = setInterval(() => {
       if (!roundEndTime) {
         clearInterval(timerInterval);
@@ -86,6 +150,7 @@
 
       if (elements.roundTimer) {
         elements.roundTimer.textContent = `${remaining}s`;
+        elements.roundTimer.setAttribute('aria-label', `Time remaining: ${remaining} seconds`);
 
         if (remaining <= 3) {
           elements.roundTimer.classList.add('critical');
@@ -106,6 +171,9 @@
     }
     if (elements.roundTimer) {
       elements.roundTimer.classList.add('hidden');
+      elements.roundTimer.classList.remove('critical');
+      elements.roundTimer.textContent = '--';
+      elements.roundTimer.setAttribute('aria-label', 'Time remaining: -- seconds');
     }
     roundEndTime = null;
   }
@@ -124,6 +192,12 @@
         heart.classList.add('lost');
       }
     });
+
+    const livesCopy = `${lives} ${lives === 1 ? 'life' : 'lives'} remaining`;
+    elements.livesDisplay.setAttribute('aria-label', livesCopy);
+    if (elements.livesText) {
+      elements.livesText.textContent = livesCopy;
+    }
 
     // Show lives display when game starts
     if (lives > 0 && currentPhase !== 'lobby') {
@@ -165,6 +239,7 @@
   }
 
   function showPhase(phaseName) {
+    document.documentElement.setAttribute('data-phase', phaseName);
     Object.keys(phases).forEach((key) => {
       const element = phases[key];
       if (element) {
@@ -208,14 +283,14 @@
       const button = document.createElement('button');
       button.className = 'option-button';
       button.type = 'button';
-      button.disabled = hasPicked || isEliminated;
+      button.disabled = hasPicked || isEliminated || currentPhase !== 'round';
       button.setAttribute('data-option-index', index);
       button.setAttribute('aria-label', `Option ${String.fromCharCode(65 + index)}: ${optionText}. ${slotsLeft} slot${slotsLeft !== 1 ? 's' : ''} remaining`);
 
       // Add urgent styling for last slot
-      if (slotsLeft === 1 && !hasPicked) {
+      if (slotsLeft === 1 && !hasPicked && currentPhase === 'round') {
         button.classList.add('urgent');
-        button.setAttribute('aria-description', 'Last slot available! Act fast!');
+        button.setAttribute('aria-label', `Option ${String.fromCharCode(65 + index)}: ${optionText}. Last slot available, pick now.`);
       }
 
       const label = document.createElement('span');
@@ -252,20 +327,16 @@
     socket.emit('player:pick', { option: optionIndex });
 
     // Visual feedback
-    const buttons = elements.optionsContainer.querySelectorAll('.option-button');
-    buttons.forEach((btn, idx) => {
-      if (idx === optionIndex) {
-        btn.classList.add('picked');
-        btn.style.borderColor = 'var(--success)';
-        btn.style.boxShadow = '0 0 0 2px var(--success), 0 0 16px var(--success-glow)';
-      }
-    });
+    const pickedButton = elements.optionsContainer.querySelector(`.option-button[data-option-index="${optionIndex}"]`);
+    if (pickedButton) {
+      pickedButton.classList.add('picked');
+      pickedButton.style.borderColor = 'var(--success)';
+      pickedButton.style.boxShadow = '0 0 0 2px var(--success), 0 0 16px var(--success-glow)';
+    }
 
     renderOptions();
 
-    if (elements.pickStatus) {
-      elements.pickStatus.classList.remove('hidden');
-    }
+    setPickStatus(LOCKED_IN_COPY, true, 'locked');
 
     // Show success toast if available
     if (window.appCommon && window.appCommon.showToast) {
@@ -280,9 +351,10 @@
 
   function handleElimination(reason) {
     isEliminated = true;
-    currentPhase = 'eliminated';
+    setCurrentPhase('eliminated');
     myLives = 0;
     stopRoundTimer();
+    resetPickStatus();
 
     if (elements.livesDisplay) {
       elements.livesDisplay.classList.add('hidden');
@@ -375,7 +447,7 @@
     // Handle restart: if we're in results and receive lobby update, reset to lobby
     if (data.phase === 'lobby') {
       if (currentPhase === 'results' || currentPhase === 'finished') {
-        currentPhase = 'lobby';
+        setCurrentPhase('lobby');
         isEliminated = false;
         hasPicked = false;
         currentRoundNumber = 0;
@@ -389,6 +461,10 @@
         }
       }
       stopRoundTimer();
+      resetPickStatus();
+      if (currentPhase !== 'lobby') {
+        setCurrentPhase('lobby');
+      }
       showPhase('lobby');
     }
   });
@@ -399,15 +475,17 @@
     const phase = data.phase;
 
     if (phase === 'lobby') {
-      currentPhase = 'lobby';
+      setCurrentPhase('lobby');
       isEliminated = false;
       hasPicked = false;
       currentRoundNumber = 0;
       currentQuestion = null;
+      resetPickStatus();
       showPhase('lobby');
     } else if (phase === 'countdown') {
-      currentPhase = 'countdown';
+      setCurrentPhase('countdown');
       stopRoundTimer();
+      resetPickStatus();
       if (data.countdown && elements.countdownValue) {
         elements.countdownValue.textContent = data.countdown.secondsLeft || 3;
       }
@@ -417,7 +495,7 @@
         return;
       }
 
-      currentPhase = 'round';
+      setCurrentPhase('round');
       if (data.round) {
         currentRoundNumber = data.round.roundNumber || 0;
         currentQuestion = data.round.question;
@@ -430,9 +508,7 @@
         if (elements.questionText && currentQuestion) {
           elements.questionText.textContent = currentQuestion.text || '';
         }
-        if (elements.pickStatus) {
-          elements.pickStatus.classList.add('hidden');
-        }
+        resetPickStatus();
 
         // Start timer if endsAt is provided
         if (data.round.endsAt) {
@@ -444,12 +520,16 @@
       }
     } else if (phase === 'reveal') {
       stopRoundTimer();
-      if (!isEliminated && currentPhase === 'round') {
+      if (!isEliminated) {
+        setCurrentPhase('reveal');
+        setPickStatus(REVEAL_WAIT_COPY, true, 'reveal');
+        renderOptions();
         showPhase('round');
       }
     } else if (phase === 'finished') {
       stopRoundTimer();
-      currentPhase = 'results';
+      setCurrentPhase('results');
+      resetPickStatus();
       if (data.results) {
         renderResults(data.results);
       }
@@ -460,7 +540,7 @@
   socket.on('round:new', (data) => {
     if (!data || isEliminated) return;
 
-    currentPhase = 'round';
+    setCurrentPhase('round');
     currentRoundNumber = data.roundNumber || 0;
     currentQuestion = data.question;
     currentSlotsLeft = data.slotsLeft || [0, 0, 0, 0];
@@ -472,9 +552,7 @@
     if (elements.questionText && currentQuestion) {
       elements.questionText.textContent = currentQuestion.text || '';
     }
-    if (elements.pickStatus) {
-      elements.pickStatus.classList.add('hidden');
-    }
+    resetPickStatus();
 
     renderOptions();
     showPhase('round');
@@ -522,7 +600,8 @@
     if (!data) return;
 
     stopRoundTimer();
-    currentPhase = 'results';
+    setCurrentPhase('results');
+    resetPickStatus();
     renderResults(data);
     showPhase('results');
 
@@ -536,8 +615,9 @@
   socket.on('game:countdownStarted', (data) => {
     if (!data || isEliminated) return;
 
-    currentPhase = 'countdown';
+    setCurrentPhase('countdown');
     stopRoundTimer();
+    resetPickStatus();
 
     // Initialize lives display for new game
     myLives = 3;
@@ -562,7 +642,7 @@
   socket.on('game:roundStarted', (data) => {
     if (!data || isEliminated) return;
 
-    currentPhase = 'round';
+    setCurrentPhase('round');
     currentRoundNumber = data.roundNumber || 0;
     currentQuestion = data.question;
     currentSlotsLeft = data.slotsLeft || [0, 0, 0, 0];
@@ -577,9 +657,7 @@
     if (elements.questionText && currentQuestion) {
       elements.questionText.textContent = currentQuestion.text || '';
     }
-    if (elements.pickStatus) {
-      elements.pickStatus.classList.add('hidden');
-    }
+    resetPickStatus();
 
     // Start timer
     if (data.endsAt) {
@@ -620,9 +698,10 @@
     if (!data || isEliminated) return;
 
     stopRoundTimer();
-
-    // Keep showing the round phase with results
-    // (Host will show full reveal, students just wait)
+    setCurrentPhase('reveal');
+    setPickStatus(REVEAL_WAIT_COPY, true, 'reveal');
+    renderOptions();
+    showPhase('round');
   });
 
   // Handle game finished
@@ -630,7 +709,8 @@
     if (!data) return;
 
     stopRoundTimer();
-    currentPhase = 'results';
+    setCurrentPhase('results');
+    resetPickStatus();
     renderResults(data);
     showPhase('results');
 
@@ -663,5 +743,7 @@
 
   // Initialize connection status
   updateConnectionStatus('connecting');
+  setCurrentPhase('lobby');
   showPhase('lobby');
+  resetPickStatus();
 })();

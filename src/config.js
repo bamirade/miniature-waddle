@@ -2,10 +2,16 @@
  * Application configuration constants
  */
 
+const DEFAULT_SERVER_PORT = 3000;
+const parsedPort = Number.parseInt(process.env.PORT, 10);
+const hasExplicitPort = Number.isInteger(parsedPort) && parsedPort > 0 && parsedPort <= 65535;
+
 const config = {
   // Server configuration
   server: {
-    port: Number(process.env.PORT) || 3000,
+    port: hasExplicitPort ? parsedPort : DEFAULT_SERVER_PORT,
+    defaultPort: DEFAULT_SERVER_PORT,
+    explicitPort: hasExplicitPort,
     host: '0.0.0.0', // Listen on all network interfaces
     tickInterval: 50, // Game state tick interval in milliseconds
   },

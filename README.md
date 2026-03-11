@@ -32,6 +32,8 @@ npm start
 The server will:
 - Auto-detect your LAN IP address (e.g., `192.168.x.x`)
 - Listen on port `3000` by default
+- If port `3000` is occupied and `PORT` is unset, automatically select a free fallback port
+- If `PORT` is explicitly set to an occupied port, exit with concise remediation text
 - Display the join URL in the console
 
 ## 🌐 URLs
@@ -39,15 +41,16 @@ The server will:
 Once the server is running:
 
 - **Host Dashboard**: `http://localhost:3000/host`
-  Open this on the laptop to control the game, display the join QR code, and watch live progress.
+   Open this on the laptop to control the game, display the join QR code, and watch live progress.
+   If fallback is used, replace `3000` with the port printed at startup.
 
 - **Student Join Page**: `http://<YOUR_LAN_IP>:3000/`
   Students scan the QR code or type this URL on their phones to join.
-  Example: `http://192.168.137.1:3000/`
+   Example: `http://192.168.137.1:3000/` (or fallback port shown in logs)
 
 After joining, students are automatically redirected to the gameplay page.
 
-## � Network Setup
+## Network Setup
 
 ### Simple Setup: Use Existing WiFi (Recommended)
 
@@ -156,10 +159,21 @@ If the server detects the wrong LAN IP (e.g., VirtualBox adapter instead of your
 
 ### Port Already in Use
 
-If port 3000 is already taken, override with:
+Startup behavior is intentionally different for unset vs explicit `PORT`:
+
+- If `PORT` is **unset** and `3000` is occupied: the app auto-falls back to a free port and logs the final join URL.
+- If `PORT` is **explicitly set** and occupied: startup exits non-zero with remediation text.
+
+Use an explicit override when you want a specific fixed port:
 
 ```bash
 PORT=3001 npm start
+```
+
+Windows Command Prompt:
+
+```cmd
+set PORT=3001 && npm start
 ```
 
 ## 🎮 Game Flow
@@ -184,6 +198,32 @@ PORT=3001 npm start
 - **Frontend**: Vanilla HTML/CSS/JavaScript
 - **Real-time**: WebSocket connections via Socket.IO
 - **No build step**: Runs directly with Node
+
+## 🧪 Smoke Testing
+
+Run the automated smoke suite to verify the server and core game flow work correctly on a clean machine:
+
+```bash
+npm run smoke
+```
+
+**Expected output:**
+```
+Running smoke suite with isolated server instances...
+- occupiedDefaultPort ... PASS (250ms)
+- coreFlow ... PASS (300ms)
+- browserConsoleFlow ... PASS (900ms)
+
+Smoke summary: 3/3 passed
+```
+
+The suite validates occupied-default-port startup fallback, core game flow through finished-phase payload integrity checks, and browser-runtime host/student phase transitions with blocking console/runtime error detection.
+
+**Common failure hints:**
+- `EADDRINUSE` — another process is holding the chosen port; retry or kill the conflicting process.
+- `Server did not become ready` — server may be hanging on startup; run `npm start` manually to check for errors.
+- `game did not reach countdown` — game logic or socket event regression; check `src/game/` and `src/server/socketHandlers.js`.
+- On Linux, `npm run build` will additionally require Wine for the Windows installer target; this is an environment prerequisite, not an application regression.
 
 ## 📄 License
 

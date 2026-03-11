@@ -11,6 +11,8 @@
   let currentRound = null;
   let flashTimerInterval = null;
   let flashEndTime = null;
+  let roundTimerInterval = null;
+  let roundEndTime = null;
 
   // Prevent accidental host dashboard close during active game
   window.addEventListener('beforeunload', (e) => {
@@ -43,11 +45,14 @@
   const elements = {
     qrCode: document.getElementById('qr-code'),
     joinUrl: document.getElementById('join-url'),
+    hostPhaseTitle: document.getElementById('host-phase-title'),
+    hostPhaseHint: document.getElementById('host-phase-hint'),
     statTotal: document.getElementById('stat-total'),
     statReady: document.getElementById('stat-ready'),
     statAlive: document.getElementById('stat-alive'),
     playerList: document.getElementById('player-list'),
     startButton: document.getElementById('start-button'),
+    startButtonHelp: document.getElementById('start-button-help'),
     countdownCard: document.getElementById('countdown-card'),
     countdownValue: document.getElementById('countdown-value'),
     roundCard: document.getElementById('round-card'),
@@ -111,22 +116,61 @@
       });
   }
 
+  function updatePhaseBanner() {
+    if (!elements.hostPhaseTitle || !elements.hostPhaseHint) {
+      return;
+    }
+
+    let title = 'Lobby';
+    let hint = 'Share the join code so students can connect.';
+
+    if (currentPhase === 'lobby') {
+      const totalPlayers = lobbyData && typeof lobbyData.totalPlayers === 'number' ? lobbyData.totalPlayers : 0;
+      const readyCount = lobbyData && typeof lobbyData.readyCount === 'number' ? lobbyData.readyCount : 0;
+
+      if (totalPlayers > 0) {
+        hint = `${readyCount} of ${totalPlayers} ready. Start when the class is settled.`;
+      }
+    } else if (currentPhase === 'countdown') {
+      title = 'Round starts in';
+      hint = 'Project the countdown so everyone can prepare to answer.';
+    } else if (currentPhase === 'round') {
+      const roundNumber = currentRound && currentRound.roundNumber ? currentRound.roundNumber : 1;
+      title = `Round ${roundNumber} live`;
+      hint = 'Students are choosing now. Options disappear when slots are full.';
+    } else if (currentPhase === 'reveal') {
+      title = 'Checking answers';
+      hint = 'Lives and eliminations are updating before the next countdown.';
+    } else if (currentPhase === 'finished') {
+      title = 'Final standings';
+      hint = 'Review the podium or start a new game.';
+    }
+
+    elements.hostPhaseTitle.textContent = title;
+    elements.hostPhaseHint.textContent = hint;
+  }
+
   function updateStats(data) {
     if (!data) return;
 
     if (elements.statTotal) {
       elements.statTotal.textContent = data.totalPlayers || 0;
+      elements.statTotal.setAttribute('aria-label', `${data.totalPlayers || 0} total players`);
     }
     if (elements.statReady) {
       elements.statReady.textContent = data.readyCount || 0;
+      elements.statReady.setAttribute('aria-label', `${data.readyCount || 0} players ready`);
     }
     if (elements.statAlive) {
       elements.statAlive.textContent = data.aliveCount || 0;
+      elements.statAlive.setAttribute('aria-label', `${data.aliveCount || 0} players alive`);
     }
   }
 
   function renderPlayerList(players) {
     if (!elements.playerList || !players) return;
+
+    elements.playerList.setAttribute('aria-label', `${players.length} players in game`);
 
     if (players.length === 0) {
       elements.playerList.innerHTML = '<p class="muted">No players yet</p>';
@@ -138,6 +182,7 @@
     players.forEach((player) => {
       const entry = document.createElement('div');
       entry.className = 'player-entry';
+      entry.setAttribute('role', 'listitem');
 
       const badge = document.createElement('div');
       badge.className = 'player-status-badge';
@@ -185,14 +230,26 @@
   function updateStartButton(canStart, phase) {
     if (!elements.startButton) return;
 
+    let helperText = 'Enabled when at least one player is connected and ready.';
+
     if (phase === 'finished') {
       elements.startButton.textContent = 'New Game';
       elements.startButton.disabled = false;
+      helperText = 'Final standings locked. Launch a new game when ready.';
     } else if (phase === 'lobby') {
       elements.startButton.textContent = 'Start Game';
       elements.startButton.disabled = !canStart;
+      helperText = canStart
+        ? 'Class is ready. Launch when you want the countdown to begin.'
+        : 'Waiting for at least one ready player before launch.';
     } else {
+      elements.startButton.textContent = 'Start Game';
       elements.startButton.disabled = true;
+      helperText = 'Game is in progress. Launch control unlocks after final standings.';
+    }
+
+    if (elements.startButtonHelp) {
+      elements.startButtonHelp.textContent = helperText;
     }
   }
 
@@ -323,6 +380,58 @@
     flashEndTime = null;
   }
 
+  function updateRoundTimerUI(remaining) {
+    if (!elements.roundTimer) return;
+
+    elements.roundTimer.textContent = `${remaining}s`;
+    elements.roundTimer.setAttribute('aria-label', `Time remaining: ${remaining} seconds`);
+    elements.roundTimer.classList.toggle('critical', remaining <= 3);
+  }
+
+  function startRoundTimer(endsAt) {
+    if (!elements.roundTimer || !endsAt) return;
+
+    roundEndTime = endsAt;
+    elements.roundTimer.classList.remove('critical');
+
+    if (roundTimerInterval) {
+      clearInterval(roundTimerInterval);
+    }
+
+    const initialRemaining = Math.max(0, Math.ceil((roundEndTime - Date.now()) / 1000));
+    updateRoundTimerUI(initialRemaining);
+
+    roundTimerInterval = setInterval(() => {
+      if (!roundEndTime) {
+        clearInterval(roundTimerInterval);
+        return;
+      }
+
+      const now = Date.now();
+      const remaining = Math.max(0, Math.ceil((roundEndTime - now) / 1000));
+      updateRoundTimerUI(remaining);
+
+      if (remaining === 0) {
+        clearInterval(roundTimerInterval);
+        roundTimerInterval = null;
+      }
+    }, 100);
+  }
+
+  function stopRoundTimer() {
+    if (roundTimerInterval) {
+      clearInterval(roundTimerInterval);
+      roundTimerInterval = null;
+    }
+
+    roundEndTime = null;
+    if (elements.roundTimer) {
+      elements.roundTimer.classList.remove('critical');
+      elements.roundTimer.textContent = '--';
+      elements.roundTimer.setAttribute('aria-label', 'Time remaining: -- seconds');
+    }
+  }
+
   function updateFlashOptions(slotsLeft) {
     if (!elements.flashOptions || !currentRound || !currentRound.question) return;
 
@@ -355,6 +464,7 @@
 
       const bar = document.createElement('div');
       bar.className = 'option-bar';
+      bar.setAttribute('role', 'listitem');
 
       const header = document.createElement('div');
       header.className = 'option-header';
@@ -450,6 +560,7 @@
     updateStats(data);
     renderPlayerList(data.players || []);
     updateStartButton(data.canStart, data.phase || 'lobby');
+    updatePhaseBanner();
   });
 
   socket.on('game:state', (data) => {
@@ -460,9 +571,12 @@
 
     if (phase === 'lobby') {
       currentPhase = 'lobby';
+      currentRound = null;
       hideFlashOverlay();
+      stopRoundTimer();
       showCard(null);
       if (data.lobby) {
+        lobbyData = data.lobby;
         updateStats(data.lobby);
         renderPlayerList(data.lobby.players || []);
         updateStartButton(data.lobby.canStart, phase);
@@ -470,12 +584,18 @@
     } else if (phase === 'countdown') {
       currentPhase = 'countdown';
       hideFlashOverlay();
+      stopRoundTimer();
+      updateStartButton(false, 'countdown');
       if (data.countdown && elements.countdownValue) {
         elements.countdownValue.textContent = data.countdown.secondsLeft || 3;
+      }
+      if (data.lobby) {
+        lobbyData = data.lobby;
       }
       showCard('countdown');
     } else if (phase === 'round') {
       currentPhase = 'round';
+      updateStartButton(false, 'round');
       if (data.round) {
         currentRound = data.round;
 
@@ -500,16 +620,24 @@
           data.round.endsAt,
           data.round.slotsLeft || [0, 0, 0, 0]
         );
+        if (data.round.endsAt) {
+          startRoundTimer(data.round.endsAt);
+        } else {
+          stopRoundTimer();
+        }
 
         showCard('round');
       }
 
       if (data.lobby) {
+        lobbyData = data.lobby;
         updateStats(data.lobby);
         renderPlayerList(data.lobby.players || []);
       }
     } else if (phase === 'reveal') {
+      updateStartButton(false, 'reveal');
       hideFlashOverlay();
+      stopRoundTimer();
       if (currentRound && data.round) {
         renderOptions(
           data.round.question,
@@ -520,28 +648,34 @@
       }
 
       if (data.lobby) {
+        lobbyData = data.lobby;
         renderPlayerList(data.lobby.players || []);
       }
     } else if (phase === 'finished') {
       currentPhase = 'finished';
       hideFlashOverlay();
+      stopRoundTimer();
       if (data.results) {
         renderResults(data.results);
         showCard('results');
       }
 
       if (data.lobby) {
+        lobbyData = data.lobby;
         updateStats(data.lobby);
         renderPlayerList(data.lobby.players || []);
         updateStartButton(false, 'finished');
       }
     }
+
+    updatePhaseBanner();
   });
 
   socket.on('round:new', (data) => {
     if (!data) return;
 
     onPhaseChange('round');
+    updateStartButton(false, 'round');
     currentRound = data;
 
     if (elements.roundNumber) {
@@ -566,7 +700,14 @@
       data.slotsLeft || [0, 0, 0, 0]
     );
 
+    if (data.endsAt) {
+      startRoundTimer(data.endsAt);
+    } else {
+      stopRoundTimer();
+    }
+
     showCard('round');
+    updatePhaseBanner();
   });
 
   socket.on('round:update', (data) => {
@@ -583,7 +724,9 @@
       // Update flash overlay
       updateFlashOptions(data.slotsLeft || [0, 0, 0, 0]);
     } else if (data.type === 'reveal') {
+      onPhaseChange('reveal');
       hideFlashOverlay();
+      stopRoundTimer();
       if (data.question) {
         currentRound.question = data.question;
       }
@@ -593,6 +736,7 @@
         data.pickedByOption ? data.pickedByOption.map((arr) => arr.length) : [0, 0, 0, 0],
         [0, 0, 0, 0]
       );
+      updatePhaseBanner();
     }
   });
 
@@ -600,9 +744,12 @@
     if (!data) return;
 
     onPhaseChange('finished');
+    updateStartButton(false, 'finished');
     hideFlashOverlay();
+    stopRoundTimer();
     renderResults(data);
     showCard('results');
+    updatePhaseBanner();
   });
 
   // Handle life lost events
@@ -768,9 +915,14 @@
 
     previousPhase = currentPhase;
     currentPhase = newPhase;
+    document.documentElement.setAttribute('data-phase', newPhase);
     updateAIControls();
+    updatePhaseBanner();
   }
 
   initJoinInfo();
+  document.documentElement.setAttribute('data-phase', currentPhase);
+  updateStartButton(false, currentPhase);
   updateAIControls();
+  updatePhaseBanner();
 })();

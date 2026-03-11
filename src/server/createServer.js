@@ -66,6 +66,7 @@ function createServer(options = {}) {
     res.json({
       port,
       joinUrl: JOIN_URL,
+      hostIp: LAN_IP,
       ip: LAN_IP,
     });
   });
@@ -110,8 +111,9 @@ function createServer(options = {}) {
 
   // Start server
   const startServer = () => {
-    return new Promise((resolve) => {
-      server.listen(port, host, () => {
+    return new Promise((resolve, reject) => {
+      const onListening = () => {
+        server.off('error', onError);
         console.log(`=== Game Host Server Started ===`);
         console.log(`Server listening on all interfaces (${host}:${port})`);
         console.log(`Local address: http://localhost:${port}/host`);
@@ -126,14 +128,33 @@ function createServer(options = {}) {
           joinUrl: JOIN_URL,
           lanIp: LAN_IP,
         });
-      });
+      };
+
+      const onError = (error) => {
+        server.off('listening', onListening);
+        reject(error);
+      };
+
+      server.once('listening', onListening);
+      server.once('error', onError);
+
+      try {
+        server.listen(port, host);
+      } catch (error) {
+        server.off('listening', onListening);
+        server.off('error', onError);
+        reject(error);
+      }
     });
   };
 
   // Cleanup function
   const cleanup = () => {
     clearInterval(tickIntervalId);
-    server.close();
+    io.close();
+    if (server.listening) {
+      server.close();
+    }
   };
 
   return {
