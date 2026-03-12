@@ -121,6 +121,17 @@
       font-size: 1rem;
       margin-top: 16px;
     }
+    .alive-count {
+      display: inline-block;
+      background: #1a1a2e;
+      border: 1px solid #333;
+      border-radius: 8px;
+      padding: 6px 16px;
+      margin-top: 10px;
+      font-size: 0.95rem;
+      color: #aaa;
+    }
+    .alive-count strong { color: #4caf50; }
     .timer-bar {
       width: 100%;
       height: 6px;
@@ -153,6 +164,7 @@
       text-align: left;
       max-width: 500px;
       margin: 20px auto 0;
+      position: relative;
     }
     .scoreboard-row {
       display: flex;
@@ -162,15 +174,16 @@
       border-radius: 10px;
       margin-bottom: 6px;
       background: #1a1a2e;
-      opacity: 0;
-      animation: rowSlide 0.35s ease forwards;
+      transition: transform 0.8s cubic-bezier(0.22, 1, 0.36, 1),
+                  opacity 0.4s ease,
+                  box-shadow 0.4s ease;
     }
-    .scoreboard-row:nth-child(1) { animation-delay: 0.1s; }
-    .scoreboard-row:nth-child(2) { animation-delay: 0.18s; }
-    .scoreboard-row:nth-child(3) { animation-delay: 0.26s; }
-    .scoreboard-row:nth-child(4) { animation-delay: 0.34s; }
-    .scoreboard-row:nth-child(5) { animation-delay: 0.42s; }
-    .scoreboard-row:nth-child(n+6) { animation-delay: 0.5s; }
+    .scoreboard-row.rank-up {
+      box-shadow: 0 0 12px rgba(76, 175, 80, 0.3);
+    }
+    .scoreboard-row.rank-down {
+      box-shadow: 0 0 12px rgba(244, 67, 54, 0.2);
+    }
     @keyframes rowSlide {
       from { opacity: 0; transform: translateX(-20px); }
       to   { opacity: 1; transform: translateX(0); }
@@ -179,6 +192,41 @@
     .sb-name { font-weight: 600; }
     .sb-lives { letter-spacing: 2px; }
     .sb-score { color: #6c63ff; font-weight: 600; }
+    .sb-streak {
+      background: linear-gradient(135deg, #ff9800, #ff5722);
+      color: #fff;
+      font-size: 0.75rem;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 10px;
+      margin-left: 6px;
+    }
+    .sb-rank-change {
+      font-size: 0.8rem;
+      font-weight: 700;
+      margin-right: 8px;
+      min-width: 28px;
+      display: inline-block;
+    }
+    .sb-rank-change.up   { color: #4caf50; }
+    .sb-rank-change.down { color: #f44336; }
+    .sb-rank-change.same { color: #555; }
+    .sb-rank-num {
+      color: #6c63ff;
+      font-weight: 800;
+      font-size: 0.85rem;
+      margin-right: 8px;
+      min-width: 20px;
+      display: inline-block;
+    }
+    /* First-round entrance when no previous data */
+    .scoreboard-row.first-appear {
+      animation: rowSlideIn 0.4s ease backwards;
+    }
+    @keyframes rowSlideIn {
+      from { opacity: 0; transform: translateX(-20px); }
+      to   { opacity: 1; transform: translateX(0); }
+    }
 
     /* Finished */
     .podium {
@@ -259,6 +307,7 @@
       <div class="host-choices" id="hostChoices"></div>
       <div class="timer-bar"><div class="timer-bar-inner" id="timerBar"></div></div>
       <p class="answer-progress" id="answerProgress"></p>
+      <div class="alive-count" id="aliveCount"></div>
     </div>
 
     <!-- Reveal -->
@@ -297,12 +346,14 @@
     }
 
     let timerInterval = null;
+    let prevRanks = {}; // name -> previous rank index (0-based)
 
     ws.addEventListener('open', () => {
       ws.send(JSON.stringify({ type: 'host-join' }));
     });
 
     document.getElementById('startBtn').addEventListener('click', () => {
+      initAudio();
       ws.send(JSON.stringify({ type: 'start' }));
     });
 
@@ -319,6 +370,45 @@
       const d = document.createElement('div');
       d.textContent = str;
       return d.innerHTML;
+    }
+
+    // ── Sound Effects (Web Audio API placeholders) ──────────
+    let audioCtx = null;
+    function initAudio() {
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+    }
+    function playTone(freq, type, duration, vol, ramp) {
+      if (!audioCtx) return;
+      const t = audioCtx.currentTime;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = type;
+      osc.frequency.setValueAtTime(freq, t);
+      if (ramp) osc.frequency.linearRampToValueAtTime(ramp, t + duration);
+      gain.gain.setValueAtTime(vol, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + duration);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start(t);
+      osc.stop(t + duration);
+    }
+    function sfxTick() {
+      playTone(800, 'sine', 0.05, 0.15);
+    }
+    function sfxQuestion() {
+      playTone(600, 'triangle', 0.12, 0.2);
+      setTimeout(() => playTone(900, 'triangle', 0.15, 0.2), 80);
+    }
+    function sfxReveal() {
+      playTone(500, 'sine', 0.1, 0.2);
+      setTimeout(() => playTone(700, 'sine', 0.25, 0.25), 100);
+    }
+    function sfxFinished() {
+      playTone(523, 'square', 0.15, 0.2);
+      setTimeout(() => playTone(659, 'square', 0.15, 0.2), 150);
+      setTimeout(() => playTone(784, 'square', 0.15, 0.2), 300);
+      setTimeout(() => playTone(1047, 'square', 0.4, 0.25), 450);
     }
 
     ws.addEventListener('message', (e) => {
@@ -360,6 +450,7 @@
 
         case 'question': {
           show('question-screen');
+          sfxQuestion();
           document.getElementById('hostQNum').textContent = `Question ${msg.index + 1} of ${msg.total}`;
           document.getElementById('hostQText').textContent = msg.question;
           const choices = document.getElementById('hostChoices');
@@ -371,17 +462,22 @@
             choices.appendChild(div);
           });
           document.getElementById('answerProgress').textContent = 'Waiting for answers…';
+          document.getElementById('aliveCount').innerHTML =
+            `<strong>${msg.aliveCount || '?'}</strong> / ${msg.totalPlayers || '?'} players alive`;
 
-          // Timer bar (15s)
+          // Timer bar (dynamic time limit)
+          const timeMs = (msg.timeLimit || 15) * 1000;
           const bar = document.getElementById('timerBar');
           bar.style.width = '100%';
           let elapsed = 0;
           clearInterval(timerInterval);
           timerInterval = setInterval(() => {
             elapsed += 100;
-            const pct = Math.max(0, 100 - (elapsed / 15000) * 100);
+            const pct = Math.max(0, 100 - (elapsed / timeMs) * 100);
             bar.style.width = pct + '%';
-            if (elapsed >= 15000) clearInterval(timerInterval);
+            const hostRemaining = timeMs - elapsed;
+            if (hostRemaining <= 5000 && hostRemaining > 0 && elapsed % 1000 < 100) sfxTick();
+            if (elapsed >= timeMs) clearInterval(timerInterval);
           }, 100);
           break;
         }
@@ -393,24 +489,20 @@
 
         case 'reveal': {
           clearInterval(timerInterval);
+          sfxReveal();
           show('reveal-screen');
           document.getElementById('correctAnswer').textContent = msg.answer;
-          const sb = document.getElementById('scoreboard');
-          sb.innerHTML = '';
-          const sorted = [...msg.players].sort((a, b) => b.score - a.score || b.lives - a.lives);
-          sorted.forEach(p => {
-            const row = document.createElement('div');
-            row.className = 'scoreboard-row' + (p.alive ? '' : ' dead');
-            row.innerHTML = `<span class="sb-name">${escapeHtml(p.name)}</span>
-                             <span class="sb-lives">${livesStr(p.lives)}</span>
-                             <span class="sb-score">${p.score} pts</span>`;
-            sb.appendChild(row);
-          });
+          if (msg.aliveCount !== undefined) {
+            document.getElementById('aliveCount').innerHTML =
+              `<strong>${msg.aliveCount}</strong> players still alive`;
+          }
+          renderAnimatedScoreboard(msg.players);
           break;
         }
 
         case 'finished': {
           clearInterval(timerInterval);
+          sfxFinished();
           show('finished-screen');
           const podium = document.getElementById('podium');
           podium.innerHTML = '';
@@ -437,10 +529,91 @@
         }
 
         case 'restarted':
+          prevRanks = {};
           show('lobby-screen');
           break;
       }
     });
+
+    // ── Animated leaderboard with FLIP-style rank shifts ──────────
+    function renderAnimatedScoreboard(players) {
+      const sb = document.getElementById('scoreboard');
+      const sorted = [...players].sort((a, b) => b.score - a.score || b.lives - a.lives);
+      const isFirstRound = Object.keys(prevRanks).length === 0;
+      const ROW_HEIGHT = 48; // approx height of row + margin
+
+      // Build new rank map
+      const newRanks = {};
+      sorted.forEach((p, i) => { newRanks[p.name] = i; });
+
+      // If it's the very first reveal, just slide rows in with stagger
+      if (isFirstRound) {
+        sb.innerHTML = '';
+        sorted.forEach((p, i) => {
+          const row = createRow(p, i, 0);
+          row.classList.add('first-appear');
+          row.style.animationDelay = (i * 0.08 + 0.1) + 's';
+          sb.appendChild(row);
+        });
+        prevRanks = newRanks;
+        return;
+      }
+
+      // FLIP animation: render at old positions, then animate to new
+      sb.innerHTML = '';
+
+      // Place all rows at their OLD position via transform
+      const rows = sorted.map((p, newIdx) => {
+        const oldIdx = prevRanks[p.name] !== undefined ? prevRanks[p.name] : newIdx;
+        const delta = newIdx - oldIdx; // how many rank changes
+        const row = createRow(p, newIdx, delta);
+
+        // Start at old y-offset relative to new position
+        const offsetY = (oldIdx - newIdx) * ROW_HEIGHT;
+        row.style.transform = `translateY(${offsetY}px)`;
+        row.style.transition = 'none';
+
+        if (delta < 0) row.classList.add('rank-up');
+        else if (delta > 0) row.classList.add('rank-down');
+
+        sb.appendChild(row);
+        return row;
+      });
+
+      // Force layout, then animate to final position
+      void sb.offsetHeight;
+      requestAnimationFrame(() => {
+        rows.forEach(row => {
+          row.style.transition = '';
+          row.style.transform = 'translateY(0)';
+        });
+      });
+
+      prevRanks = newRanks;
+    }
+
+    function createRow(p, idx, rankDelta) {
+      const row = document.createElement('div');
+      row.className = 'scoreboard-row' + (p.alive ? '' : ' dead');
+
+      const rankNum = `<span class="sb-rank-num">#${idx + 1}</span>`;
+
+      let changeHtml;
+      if (rankDelta < 0) {
+        changeHtml = `<span class="sb-rank-change up">▲${Math.abs(rankDelta)}</span>`;
+      } else if (rankDelta > 0) {
+        changeHtml = `<span class="sb-rank-change down">▼${rankDelta}</span>`;
+      } else {
+        changeHtml = `<span class="sb-rank-change same">—</span>`;
+      }
+
+      const streakHtml = p.streak >= 2 ? `<span class="sb-streak">🔥${p.streak}</span>` : '';
+
+      row.innerHTML = `<span class="sb-name">${rankNum}${changeHtml}${escapeHtml(p.name)}${streakHtml}</span>
+                       <span class="sb-lives">${livesStr(p.lives)}</span>
+                       <span class="sb-score">${p.score} pts</span>`;
+      return row;
+    }
   </script>
 </body>
 </html>

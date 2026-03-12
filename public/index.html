@@ -118,6 +118,43 @@
       margin-bottom: 24px;
       line-height: 1.4;
     }
+
+    /* Timer bar for student */
+    .student-timer {
+      width: 100%;
+      height: 6px;
+      background: #222;
+      border-radius: 3px;
+      margin-bottom: 16px;
+      overflow: hidden;
+    }
+    .student-timer-inner {
+      height: 100%;
+      background: #6c63ff;
+      border-radius: 3px;
+      width: 100%;
+      transition: width 0.2s linear, background 0.3s;
+    }
+    .student-timer-inner.urgent { background: #f44336; }
+
+    /* Streak badge */
+    .streak-badge {
+      display: inline-block;
+      background: linear-gradient(135deg, #ff9800, #ff5722);
+      color: #fff;
+      font-weight: 700;
+      font-size: 0.85rem;
+      padding: 4px 12px;
+      border-radius: 20px;
+      margin-bottom: 12px;
+      animation: streakPop 0.35s ease;
+    }
+    .streak-badge.hidden { display: none !important; }
+    @keyframes streakPop {
+      0% { transform: scale(0); }
+      60% { transform: scale(1.15); }
+      100% { transform: scale(1); }
+    }
     .choices {
       display: flex;
       flex-direction: column;
@@ -176,6 +213,30 @@
       opacity: 0;
       animation: fadeUp 0.4s 0.3s ease forwards;
     }
+    /* Points earned popup */
+    .points-earned {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: #4caf50;
+      margin-top: 6px;
+      opacity: 0;
+      animation: pointsFly 0.6s 0.2s ease forwards;
+    }
+    .points-earned.zero { color: #f44336; }
+    @keyframes pointsFly {
+      0%   { opacity: 0; transform: translateY(10px) scale(0.8); }
+      50%  { opacity: 1; transform: translateY(-4px) scale(1.1); }
+      100% { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    /* Rank display on reveal */
+    .rank-display {
+      margin-top: 14px;
+      font-size: 1rem;
+      color: #aaa;
+      opacity: 0;
+      animation: fadeUp 0.4s 0.5s ease forwards;
+    }
+    .rank-display strong { color: #6c63ff; font-size: 1.3rem; }
     @keyframes bounceIn {
       0%   { transform: scale(0.3); opacity: 0; }
       50%  { transform: scale(1.08); }
@@ -265,6 +326,14 @@
       50% { transform: scale(1.15); opacity: 0.7; }
     }
 
+    /* Confetti canvas */
+    #confetti {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 200;
+    }
+
     /* Rank list entrance */
     .rank-list li {
       opacity: 0;
@@ -283,6 +352,7 @@
 
     <!-- Flash overlay for correct/wrong feedback -->
     <div class="flash-overlay" id="flashOverlay"></div>
+    <canvas id="confetti"></canvas>
 
     <!-- Register screen -->
     <div id="register" class="screen">
@@ -315,6 +385,8 @@
         <span class="score">Score: <span id="playerScore">0</span></span>
       </div>
       <div class="lives-display" id="gameLives">❤️ ❤️ ❤️</div>
+      <div class="streak-badge hidden" id="streakBadge"></div>
+      <div class="student-timer"><div class="student-timer-inner" id="studentTimer"></div></div>
       <p class="question-num" id="qNum"></p>
       <p class="question-text" id="qText"></p>
       <div class="choices" id="choices"></div>
@@ -324,7 +396,9 @@
     <div id="reveal" class="screen hidden">
       <p id="revealResult" class="reveal-result"></p>
       <p class="reveal-answer">Correct answer: <strong id="revealAnswer"></strong></p>
+      <p id="pointsEarned" class="points-earned"></p>
       <div class="lives-display" id="revealLives"></div>
+      <div id="rankDisplay" class="rank-display"></div>
     </div>
 
     <!-- Eliminated -->
@@ -366,10 +440,61 @@
       setTimeout(() => { overlay.className = 'flash-overlay'; }, 500);
     }
 
+    // ── Sound Effects (Web Audio API placeholders) ──────────
+    let audioCtx = null;
+    function initAudio() {
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+    }
+    function playTone(freq, type, duration, vol, ramp) {
+      if (!audioCtx) return;
+      const t = audioCtx.currentTime;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = type;
+      osc.frequency.setValueAtTime(freq, t);
+      if (ramp) osc.frequency.linearRampToValueAtTime(ramp, t + duration);
+      gain.gain.setValueAtTime(vol, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + duration);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start(t);
+      osc.stop(t + duration);
+    }
+    function sfxCorrect() {
+      playTone(523, 'sine', 0.15, 0.3);
+      setTimeout(() => playTone(784, 'sine', 0.3, 0.3), 100);
+    }
+    function sfxWrong() {
+      playTone(150, 'sawtooth', 0.4, 0.2);
+    }
+    function sfxTimeout() {
+      playTone(400, 'triangle', 0.5, 0.2, 200);
+    }
+    function sfxTick() {
+      playTone(800, 'sine', 0.05, 0.15);
+    }
+    function sfxCountdown(n) {
+      playTone(n === 1 ? 880 : 440, 'square', 0.12, 0.2);
+    }
+    function sfxEliminated() {
+      playTone(440, 'sine', 0.2, 0.25);
+      setTimeout(() => playTone(349, 'sine', 0.2, 0.25), 200);
+      setTimeout(() => playTone(262, 'sine', 0.4, 0.25), 400);
+    }
+    function sfxFinished() {
+      playTone(523, 'square', 0.15, 0.2);
+      setTimeout(() => playTone(659, 'square', 0.15, 0.2), 150);
+      setTimeout(() => playTone(784, 'square', 0.15, 0.2), 300);
+      setTimeout(() => playTone(1047, 'square', 0.4, 0.25), 450);
+    }
+
     let myName = '';
     let myScore = 0;
     let myLives = 3;
+    let myStreak = 0;
     let lastChoice = null;
+    let studentTimerIv = null;
 
     let prevLives = 3;
 
@@ -389,6 +514,7 @@
     }
 
     document.getElementById('joinBtn').addEventListener('click', () => {
+      initAudio();
       const name = document.getElementById('nameInput').value.trim();
       if (!name) return;
       ws.send(JSON.stringify({ type: 'register', name }));
@@ -422,12 +548,14 @@
           show('starting');
           let count = 3;
           document.getElementById('countdownNum').textContent = count;
+          sfxCountdown(count);
           const iv = setInterval(() => {
             count--;
             if (count <= 0) {
               clearInterval(iv);
             } else {
               document.getElementById('countdownNum').textContent = count;
+              sfxCountdown(count);
             }
           }, 700);
           break;
@@ -440,6 +568,33 @@
           document.getElementById('gameLives').textContent = livesStr(myLives);
           document.getElementById('qNum').textContent = `Question ${msg.index + 1} of ${msg.total}`;
           document.getElementById('qText').textContent = msg.question;
+
+          // Streak badge
+          myStreak = msg.streak || 0;
+          const badge = document.getElementById('streakBadge');
+          if (myStreak >= 2) {
+            badge.textContent = `🔥 ${myStreak} streak!`;
+            badge.classList.remove('hidden');
+          } else {
+            badge.classList.add('hidden');
+          }
+
+          // Student timer bar
+          clearInterval(studentTimerIv);
+          const timeLimit = (msg.timeLimit || 15) * 1000;
+          const timerBar = document.getElementById('studentTimer');
+          timerBar.style.width = '100%';
+          timerBar.classList.remove('urgent');
+          let stElapsed = 0;
+          studentTimerIv = setInterval(() => {
+            stElapsed += 100;
+            const pct = Math.max(0, 100 - (stElapsed / timeLimit) * 100);
+            timerBar.style.width = pct + '%';
+            if (pct < 25) timerBar.classList.add('urgent');
+            const stRemaining = timeLimit - stElapsed;
+            if (stRemaining <= 5000 && stRemaining > 0 && stElapsed % 1000 < 100) sfxTick();
+            if (stElapsed >= timeLimit) clearInterval(studentTimerIv);
+          }, 100);
 
           const choicesDiv = document.getElementById('choices');
           choicesDiv.innerHTML = '';
@@ -464,24 +619,41 @@
           break;
 
         case 'reveal': {
+          clearInterval(studentTimerIv);
           const oldLives = myLives;
           myLives = msg.lives;
           myScore = msg.score;
+          myStreak = msg.streak || 0;
           const isCorrect = lastChoice === msg.answer;
           const resultEl = document.getElementById('revealResult');
 
           // Flash the screen
           if (!lastChoice) {
             flash('timeout');
+            sfxTimeout();
           } else if (isCorrect) {
             flash('correct');
+            sfxCorrect();
+            fireConfetti();
           } else {
             flash('wrong');
+            sfxWrong();
           }
 
           resultEl.textContent = lastChoice ? (isCorrect ? '✓ Correct!' : '✗ Wrong!') : '⏱ Time\u0027s up!';
           resultEl.className = 'reveal-result ' + (lastChoice ? (isCorrect ? 'correct' : 'wrong') : 'timeout');
           document.getElementById('revealAnswer').textContent = msg.answer;
+
+          // Points earned display
+          const ptsEl = document.getElementById('pointsEarned');
+          const pts = msg.pointsEarned || 0;
+          if (isCorrect && pts > 0) {
+            ptsEl.textContent = `+${pts} points` + (myStreak >= 3 ? ` (${myStreak}x streak!)` : '');
+            ptsEl.className = 'points-earned';
+          } else {
+            ptsEl.textContent = lastChoice ? 'No points' : 'No points (timed out)';
+            ptsEl.className = 'points-earned zero';
+          }
 
           // Animate lives with heart-break if lost
           prevLives = oldLives;
@@ -496,7 +668,16 @@
             scoreEl.classList.add('score-pop');
           }
 
+          // Show rank
+          const rankEl = document.getElementById('rankDisplay');
+          if (msg.rank && msg.totalPlayers) {
+            rankEl.innerHTML = `Your rank: <strong>#${msg.rank}</strong> of ${msg.totalPlayers}`;
+          } else {
+            rankEl.innerHTML = '';
+          }
+
           if (!msg.alive) {
+            sfxEliminated();
             show('eliminated');
           } else {
             show('reveal');
@@ -505,6 +686,7 @@
         }
 
         case 'finished': {
+          sfxFinished();
           const list = document.getElementById('rankList');
           list.innerHTML = '';
           msg.rankings.forEach((r, i) => {
@@ -520,7 +702,10 @@
         case 'restarted':
           myScore = 0;
           myLives = 3;
+          myStreak = 0;
+          prevLives = 3;
           lastChoice = null;
+          clearInterval(studentTimerIv);
           show('lobby');
           break;
       }
@@ -530,6 +715,53 @@
       const d = document.createElement('div');
       d.textContent = str;
       return d.innerHTML;
+    }
+
+    // ── Confetti ────────────────────────────────────────────
+    function fireConfetti() {
+      const canvas = document.getElementById('confetti');
+      const ctx = canvas.getContext('2d');
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+      const colors = ['#6c63ff', '#4caf50', '#ff9800', '#f44336', '#00bcd4', '#ffeb3b'];
+      const particles = [];
+      for (let i = 0; i < 60; i++) {
+        particles.push({
+          x: canvas.width / 2 + (Math.random() - 0.5) * 200,
+          y: canvas.height / 2,
+          vx: (Math.random() - 0.5) * 12,
+          vy: -(Math.random() * 10 + 4),
+          size: Math.random() * 8 + 4,
+          color: colors[Math.floor(Math.random() * colors.length)],
+          rot: Math.random() * 360,
+          rv: (Math.random() - 0.5) * 10,
+          life: 1,
+        });
+      }
+      let raf;
+      function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        let alive = false;
+        particles.forEach(p => {
+          if (p.life <= 0) return;
+          alive = true;
+          p.x += p.vx;
+          p.y += p.vy;
+          p.vy += 0.35;
+          p.rot += p.rv;
+          p.life -= 0.018;
+          ctx.save();
+          ctx.translate(p.x, p.y);
+          ctx.rotate(p.rot * Math.PI / 180);
+          ctx.globalAlpha = Math.max(0, p.life);
+          ctx.fillStyle = p.color;
+          ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 0.6);
+          ctx.restore();
+        });
+        if (alive) { raf = requestAnimationFrame(draw); }
+        else { ctx.clearRect(0, 0, canvas.width, canvas.height); }
+      }
+      draw();
     }
   </script>
 </body>
