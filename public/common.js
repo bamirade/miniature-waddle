@@ -14,6 +14,36 @@
     return normalized.length >= MIN_NICKNAME_LENGTH && normalized.length <= MAX_NICKNAME_LENGTH;
   }
 
+  async function copyText(value) {
+    const text = String(value || '').trim();
+    if (!text) {
+      return false;
+    }
+
+    if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+
+    const fallback = document.createElement('textarea');
+    fallback.value = text;
+    fallback.setAttribute('readonly', 'readonly');
+    fallback.style.position = 'fixed';
+    fallback.style.opacity = '0';
+    fallback.style.pointerEvents = 'none';
+    document.body.appendChild(fallback);
+    fallback.focus();
+    fallback.select();
+
+    let didCopy = false;
+    if (typeof document.execCommand === 'function') {
+      didCopy = document.execCommand('copy');
+    }
+
+    document.body.removeChild(fallback);
+    return didCopy;
+  }
+
   function initJoinPage() {
     const form = document.getElementById('join-form');
     const input = document.getElementById('nickname');
@@ -78,6 +108,7 @@
     version: '0.2.0',
     normalizeNickname,
     isValidNickname,
+    copyText,
     showToast
   };
 

@@ -6,6 +6,7 @@ const {
   removePlayer,
   getAlivePlayers,
   getAliveCount,
+  getReadyCount,
   getPublicLobbyState,
   createRoundSlotsPayload,
   getSlotsLeft,
@@ -20,6 +21,11 @@ const {
   getPublicRoundState,
   getResults
 } = require('./roundManager');
+const { normalizeLabelSetKey } = require('./questions');
+
+function createLobbySessionId(now = Date.now()) {
+  return `lobby-${now}-${Math.random().toString(36).slice(2, 10)}`;
+}
 
 /**
  * Server-authoritative game engine.
@@ -43,10 +49,14 @@ const {
  */
 function createGameState() {
   const { GAME_CONFIG } = require('./constants');
+  const appConfig = require('../config');
   const optionCount = GAME_CONFIG.OPTIONS_PER_QUESTION;
 
   return {
     phase: PHASES.LOBBY,
+    gradeLevel: appConfig.game.gradeLevel || 'standard',
+    labelSet: normalizeLabelSetKey(appConfig.game.labelSet),
+    lobbySessionId: createLobbySessionId(),
     createdAt: Date.now(),
     phaseStartedAt: null,
     phaseEndsAt: null,
@@ -81,6 +91,10 @@ function startGame(state) {
   const players = listPlayers(state);
   if (players.length === 0) {
     return { ok: false, reason: 'no_players', events: [] };
+  }
+
+  if (state.phase === PHASES.LOBBY && getReadyCount(state) === 0) {
+    return { ok: false, reason: 'no_ready_players', events: [] };
   }
 
   // Reset all player states

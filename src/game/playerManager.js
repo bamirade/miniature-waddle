@@ -18,7 +18,7 @@ function addPlayer(state, socketId, name) {
     return { ok: false, reason: 'invalid_arguments', events: [] };
   }
 
-  if (state.phase !== PHASES.LOBBY) {
+  if (state.phase !== PHASES.LOBBY && state.phase !== PHASES.FINISHED) {
     return { ok: false, reason: 'game_already_started', events: [] };
   }
 
@@ -142,6 +142,15 @@ function getAliveCount(state) {
 }
 
 /**
+ * Get count of players who are ready
+ * @param {object} state - Game state
+ * @returns {number} Number of ready players
+ */
+function getReadyCount(state) {
+  return listPlayers(state).filter((player) => player.ready).length;
+}
+
+/**
  * Get public lobby state for broadcasting
  * @param {object} state - Game state
  * @returns {object} Public lobby state
@@ -159,14 +168,16 @@ function getPublicLobbyState(state) {
   }));
 
   const aliveCount = players.filter((player) => player.status === 'alive').length;
-  const readyCount = players.filter((player) => player.ready).length;
+  const readyCount = getReadyCount(state);
 
   return {
     phase: state.phase,
+    gradeLevel: state.gradeLevel || 'standard',
+    lobbySessionId: state.lobbySessionId || null,
     totalPlayers: players.length,
     aliveCount,
     readyCount,
-    canStart: state.phase === PHASES.LOBBY && players.length > 0,
+    canStart: state.phase === PHASES.LOBBY && readyCount > 0,
     players
   };
 }
@@ -208,6 +219,7 @@ module.exports = {
   listPlayers,
   getAlivePlayers,
   getAliveCount,
+  getReadyCount,
   getPublicLobbyState,
   createRoundSlotsPayload,
   getSlotsLeft,

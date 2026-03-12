@@ -113,12 +113,27 @@ async function runCoreFlow(context) {
   assertCondition(Object.prototype.hasOwnProperty.call(config, 'port'), '/config missing required key: port');
   assertCondition(Object.prototype.hasOwnProperty.call(config, 'hostIp'), '/config missing required key: hostIp');
   assertCondition(Object.prototype.hasOwnProperty.call(config, 'joinUrl'), '/config missing required key: joinUrl');
+  assertCondition(Object.prototype.hasOwnProperty.call(config, 'version'), '/config missing required key: version');
+  assertCondition(Object.prototype.hasOwnProperty.call(config, 'timings'), '/config missing required key: timings');
+  assertCondition(Object.prototype.hasOwnProperty.call(config, 'startPolicy'), '/config missing required key: startPolicy');
   assertCondition(Number.isInteger(config.port) && config.port > 0, '/config port must be a positive integer');
   assertCondition(typeof config.hostIp === 'string' && config.hostIp.length > 0, '/config hostIp must be a non-empty string');
   assertCondition(typeof config.joinUrl === 'string' && config.joinUrl.length > 0, '/config joinUrl must be a non-empty string');
+  assertCondition(typeof config.version === 'string' && config.version.length > 0, '/config version must be a non-empty string');
+  assertCondition(config.timings && typeof config.timings.countdownMs === 'number', '/config timings must include countdownMs');
+  assertCondition(config.startPolicy && config.startPolicy.initialLaunchRequiresReady === true, '/config startPolicy should require ready launch');
+
+  const health = await requestJson('/health', 5_000);
+  assertCondition(health && health.status === 'ok', '/health must report ok status');
+  assertCondition(health.phase === 'lobby', '/health should report lobby before the game starts');
+  assertCondition(typeof health.uptimeMs === 'number' && health.uptimeMs >= 0, '/health uptimeMs must be a non-negative number');
+
+  const qrSvg = await requestText('/qr.svg', 5_000);
+  assertCondition(qrSvg.includes('<svg'), '/qr.svg must return SVG markup');
 
   const hostPage = await requestText('/host', 5_000);
   assertCondition(hostPage.includes('id="start-button"'), '/host did not return expected host dashboard markup');
+  assertCondition(hostPage.includes('id="copy-join-button"'), '/host should expose copy join action');
 
   const hostSocket = await connectClient(baseUrl, 'host socket');
   const studentSocket = await connectClient(baseUrl, 'student socket');
@@ -136,6 +151,18 @@ async function runCoreFlow(context) {
 
     studentSocket.emit('player:join', { name: 'Smoke Student' });
     await joinedLobby;
+
+    const blockedStart = waitForEvent(
+      hostSocket,
+      'player:result',
+      (payload) => payload && payload.status === 'error' && /ready/i.test(payload.reason),
+      EVENT_TIMEOUT_MS,
+      'blocked host start before ready check-in'
+    );
+
+    hostSocket.emit('host:start', {});
+    const blockedStartPayload = await blockedStart;
+    assertCondition(/ready/i.test(blockedStartPayload.reason), 'host start should explain ready requirement');
 
     const readyLobby = waitForEvent(
       hostSocket,

@@ -7,10 +7,10 @@ const { GAME_CONFIG } = require('./constants');
 
 /**
  * Compute capacities for each option based on alive player count
- * Algorithm: base = floor(count/4), distribute remainder randomly
+ * Algorithm: base = floor(count/optionCount), distribute remainder randomly
  * @param {number} aliveCount - Number of alive players
  * @param {Function} rngFn - Random number generator function (0-1)
- * @returns {Array<number>} Capacity for each of 4 options
+ * @returns {Array<number>} Capacity for each configured option
  */
 function computeCapacities(aliveCount, rngFn = Math.random) {
   const optionCount = GAME_CONFIG.OPTIONS_PER_QUESTION;

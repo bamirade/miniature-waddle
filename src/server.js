@@ -5,6 +5,7 @@ const { createServer } = require('./server/createServer');
 
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 let gameServer = null;
+let isShuttingDown = false;
 
 function isAddressInUseError(error) {
   return Boolean(error && error.code === 'EADDRINUSE');
@@ -122,11 +123,22 @@ startServer().catch((error) => {
 
 // Graceful shutdown
 function shutdown() {
-  console.log('\nShutting down server...');
-  if (gameServer && typeof gameServer.cleanup === 'function') {
-    gameServer.cleanup();
+  if (isShuttingDown) {
+    return;
   }
-  process.exit(0);
+
+  isShuttingDown = true;
+  console.log('\nShutting down server...');
+
+  try {
+    if (gameServer && typeof gameServer.cleanup === 'function') {
+      gameServer.cleanup();
+    }
+    process.exit(0);
+  } catch (error) {
+    console.error('Shutdown encountered an error:', error);
+    process.exit(1);
+  }
 }
 
 process.on('SIGINT', shutdown);

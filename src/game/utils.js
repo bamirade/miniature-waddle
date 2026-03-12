@@ -2,6 +2,8 @@
  * Helper utilities for game state management
  */
 
+const MAX_PLAYER_NAME_LENGTH = 16;
+
 /**
  * Sanitize and validate player name
  * @param {string} name - Player name to sanitize
@@ -17,7 +19,7 @@ function sanitizeName(name) {
     return 'Player';
   }
 
-  const sanitized = trimmed.slice(0, 20); // Max 20 characters
+  const sanitized = trimmed.slice(0, MAX_PLAYER_NAME_LENGTH);
   return sanitized;
 }
 
@@ -65,6 +67,7 @@ function calculateSlotsLeft(capacities, pickedByOption) {
 }
 
 module.exports = {
+  MAX_PLAYER_NAME_LENGTH,
   sanitizeName,
   eventAll,
   eventPlayer,

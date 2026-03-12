@@ -8,15 +8,49 @@
     <style>
       .host-page {
         min-height: 100vh;
+        position: relative;
+        isolation: isolate;
+        overflow-x: hidden;
         background:
           radial-gradient(circle at 14% -12%, rgba(0, 111, 143, 0.22), transparent 42%),
           radial-gradient(circle at 86% -10%, rgba(192, 139, 47, 0.2), transparent 38%),
           linear-gradient(180deg, #f8f2e5 0%, #f2e9d9 52%, #ede1cf 100%);
       }
 
+      .host-page::before,
+      .host-page::after {
+        content: '';
+        position: fixed;
+        width: min(34rem, 58vw);
+        height: min(34rem, 58vw);
+        border-radius: 50%;
+        pointer-events: none;
+        z-index: 0;
+        opacity: 0.46;
+        filter: blur(16px);
+        mix-blend-mode: soft-light;
+        animation: mwAmbientDrift 20s var(--easing-emphasis) infinite alternate;
+      }
+
+      .host-page::before {
+        top: -12rem;
+        left: -10rem;
+        background: radial-gradient(circle, rgba(0, 111, 143, 0.34) 0%, rgba(0, 111, 143, 0) 72%);
+      }
+
+      .host-page::after {
+        right: -12rem;
+        bottom: -14rem;
+        background: radial-gradient(circle, rgba(192, 139, 47, 0.3) 0%, rgba(192, 139, 47, 0) 72%);
+        animation-duration: 24s;
+        animation-delay: -7s;
+      }
+
       .host-page main {
         max-width: 1280px;
         margin: 0 auto;
+        position: relative;
+        z-index: 1;
         padding: clamp(0.9rem, 1.6vw, 1.4rem);
         border: none;
         background: transparent;
@@ -67,9 +101,63 @@
           rgba(0, 111, 143, 0.05) 44%,
           rgba(255, 251, 242, 0.94) 100%
         );
+        position: relative;
+        overflow: hidden;
+        backdrop-filter: blur(10px);
         box-shadow:
           inset 0 0 0 1px rgba(255, 255, 255, 0.5),
           0 10px 24px rgba(48, 35, 12, 0.14);
+        transition:
+          transform var(--duration-base) var(--easing-soft),
+          border-color var(--duration-base) var(--easing-in-out),
+          background var(--duration-base) var(--easing-in-out),
+          box-shadow var(--duration-base) var(--easing-in-out);
+      }
+
+      .phase-banner::after {
+        content: '';
+        position: absolute;
+        right: -5rem;
+        bottom: -6rem;
+        width: 18rem;
+        height: 18rem;
+        border-radius: 50%;
+        background: radial-gradient(circle, rgba(255, 255, 255, 0.34) 0%, rgba(255, 255, 255, 0) 72%);
+        pointer-events: none;
+      }
+
+      .phase-banner-shift {
+        animation: mwIndicatorPop var(--duration-emphasis) var(--easing-emphasis);
+      }
+
+      :root[data-phase='countdown'] .phase-banner {
+        border-color: rgba(0, 111, 143, 0.28);
+        box-shadow:
+          inset 0 0 0 1px rgba(255, 255, 255, 0.56),
+          0 14px 28px rgba(0, 111, 143, 0.16);
+      }
+
+      :root[data-phase='round'] .phase-banner {
+        border-color: rgba(31, 141, 94, 0.26);
+        background: linear-gradient(140deg, rgba(31, 141, 94, 0.12) 0%, rgba(31, 141, 94, 0.05) 42%, rgba(255, 251, 242, 0.94) 100%);
+        box-shadow:
+          inset 0 0 0 1px rgba(255, 255, 255, 0.56),
+          0 16px 30px rgba(31, 141, 94, 0.14);
+      }
+
+      :root[data-phase='reveal'] .phase-banner {
+        border-color: rgba(192, 139, 47, 0.34);
+        background: linear-gradient(140deg, rgba(192, 139, 47, 0.14) 0%, rgba(192, 139, 47, 0.05) 42%, rgba(255, 251, 242, 0.94) 100%);
+        box-shadow:
+          inset 0 0 0 1px rgba(255, 255, 255, 0.56),
+          0 16px 30px rgba(192, 139, 47, 0.15);
+      }
+
+      :root[data-phase='finished'] .phase-banner {
+        border-color: rgba(192, 139, 47, 0.4);
+        box-shadow:
+          inset 0 0 0 1px rgba(255, 255, 255, 0.56),
+          0 18px 34px rgba(192, 139, 47, 0.16);
       }
 
       .phase-main {
@@ -186,6 +274,26 @@
         grid-template-columns: minmax(15rem, 0.95fr) minmax(17rem, 1.25fr) minmax(14rem, 0.9fr);
       }
 
+      .dashboard-grid > .card {
+        animation: mwSurfaceRise var(--duration-hero) var(--easing-emphasis) both;
+      }
+
+      .card-join {
+        animation-delay: 0.03s;
+      }
+
+      .card-stats {
+        animation-delay: 0.08s;
+      }
+
+      .card-roster {
+        animation-delay: 0.13s;
+      }
+
+      .card-ai {
+        animation-delay: 0.18s;
+      }
+
       @media (max-width: 1160px) {
         .dashboard-grid {
           grid-template-columns: 1fr 1fr;
@@ -219,11 +327,23 @@
         border: 1px solid var(--border);
         border-radius: 0;
         padding: 0.9rem;
-        transition: background var(--duration-base) var(--easing-in-out);
+        backdrop-filter: blur(8px);
+        box-shadow: 0 14px 30px rgba(49, 36, 13, 0.1);
+        transition:
+          transform var(--duration-base) var(--easing-soft),
+          background var(--duration-base) var(--easing-in-out),
+          border-color var(--duration-base) var(--easing-in-out),
+          box-shadow var(--duration-base) var(--easing-in-out);
       }
 
       .card:hover {
         background: linear-gradient(160deg, rgba(255, 255, 255, 0.98), rgba(252, 246, 235, 0.98));
+        transform: translateY(-3px);
+        box-shadow: 0 20px 38px rgba(49, 36, 13, 0.14);
+      }
+
+      .card-enter {
+        animation: mwSurfaceRise var(--duration-emphasis) var(--easing-emphasis);
       }
 
       .card-join {
@@ -286,10 +406,75 @@
         color: var(--primary);
       }
 
+      .join-action-row {
+        display: grid;
+        gap: 0.45rem;
+      }
+
+      .join-copy-button {
+        width: 100%;
+      }
+
+      .join-copy-status {
+        min-height: 1.1rem;
+        font-size: 0.78rem;
+      }
+
+      .join-meta-list {
+        display: grid;
+        gap: 0.45rem;
+      }
+
+      .join-meta-item {
+        display: flex;
+        justify-content: space-between;
+        gap: 0.75rem;
+        align-items: center;
+        padding: 0.45rem 0.55rem;
+        border: 1px solid var(--border);
+        background: rgba(255, 255, 255, 0.42);
+        font-size: 0.8rem;
+      }
+
+      .join-meta-label {
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        font-size: 0.67rem;
+      }
+
+      .join-meta-value {
+        text-align: right;
+        font-weight: 560;
+        color: var(--text);
+      }
+
       .stat-row {
         display: grid;
         gap: 0.55rem;
         grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+
+      .readiness-meter {
+        position: relative;
+        margin-top: 0.8rem;
+        height: 0.9rem;
+        border: 1px solid var(--border);
+        background: rgba(255, 255, 255, 0.56);
+        overflow: hidden;
+      }
+
+      .readiness-meter-fill {
+        position: absolute;
+        inset: 0 auto 0 0;
+        width: 0%;
+        background: linear-gradient(90deg, rgba(0, 111, 143, 0.22), rgba(31, 141, 94, 0.32));
+        transition: width var(--duration-slow) var(--easing-emphasis);
+      }
+
+      .readiness-summary {
+        margin: 0.55rem 0 0;
+        font-size: 0.82rem;
       }
 
       .stat-item {
@@ -297,6 +482,27 @@
         padding: 0.8rem 0.55rem;
         background: rgba(255, 255, 255, 0.56);
         border: 1px solid var(--border);
+        transition: transform var(--duration-fast) var(--easing-soft), box-shadow var(--duration-fast) var(--easing-in-out), border-color var(--duration-fast) var(--easing-in-out);
+      }
+
+      .stat-item.updated {
+        animation: statFramePulse 0.42s var(--easing-emphasis);
+      }
+
+      @keyframes statFramePulse {
+        0% {
+          transform: scale(1);
+          box-shadow: none;
+        }
+        50% {
+          transform: translateY(-2px) scale(1.03);
+          box-shadow: 0 0 24px rgba(31, 141, 94, 0.12);
+          border-color: rgba(31, 141, 94, 0.3);
+        }
+        100% {
+          transform: scale(1);
+          box-shadow: none;
+        }
       }
 
       .stat-value {
@@ -460,6 +666,11 @@
         border-left: 4px solid var(--primary);
         border-radius: 0;
         margin-bottom: 1.25rem;
+        box-shadow: 0 14px 30px rgba(0, 111, 143, 0.12);
+      }
+
+      #round-card:not(.hidden) .question-display {
+        animation: mwSurfaceRise var(--duration-emphasis) var(--easing-emphasis);
       }
 
       .question-text {
@@ -473,6 +684,23 @@
       .options-display {
         display: grid;
         gap: 1rem;
+      }
+
+      .options-display > * {
+        opacity: 0;
+        animation: mwCascadeIn var(--duration-emphasis) var(--easing-emphasis) both;
+      }
+
+      .options-display > *:nth-child(2) {
+        animation-delay: 0.04s;
+      }
+
+      .options-display > *:nth-child(3) {
+        animation-delay: 0.08s;
+      }
+
+      .options-display > *:nth-child(4) {
+        animation-delay: 0.12s;
       }
 
       .option-bar {
@@ -588,6 +816,10 @@
         text-shadow: 0 0 20px var(--primary-glow);
       }
 
+      #countdown-card:not(.hidden) .countdown-value {
+        animation: mwBreathGlow 1.2s var(--easing-in-out) infinite;
+      }
+
       .start-helper {
         margin: 0.65rem 0 0;
         font-size: 0.85rem;
@@ -617,6 +849,19 @@
         border-radius: 0;
         min-width: 140px;
         border: none;
+      }
+
+      #results-card:not(.hidden) .podium-entry {
+        opacity: 0;
+        animation: mwCascadeIn var(--duration-emphasis) var(--easing-emphasis) both;
+      }
+
+      #results-card:not(.hidden) .podium-entry:nth-child(2) {
+        animation-delay: 0.05s;
+      }
+
+      #results-card:not(.hidden) .podium-entry:nth-child(3) {
+        animation-delay: 0.1s;
       }
 
       .podium-rank {
@@ -668,7 +913,12 @@
         align-items: center;
         justify-content: center;
         padding: 2rem;
+        backdrop-filter: blur(10px);
         animation: flashIn 0.3s ease-out;
+      }
+
+      .flash-overlay.overlay-enter {
+        animation: flashIn var(--duration-emphasis) var(--easing-emphasis);
       }
 
       @keyframes flashIn {
@@ -966,6 +1216,107 @@
       .ai-status.active {
         color: var(--success);
       }
+
+        /* Reveal recap styles */
+        .reveal-correct-banner {
+          display: flex;
+          align-items: center;
+          gap: 0.75rem;
+          padding: 1rem 1.1rem;
+          background: rgba(0, 255, 136, 0.08);
+          border: 2px solid var(--success);
+          border-radius: 0;
+          margin-bottom: 1rem;
+          animation: revealIn 0.15s ease-out;
+        }
+
+        @keyframes revealIn {
+          from { opacity: 0; transform: translateY(-6px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+
+        .reveal-correct-label {
+          font-size: 0.7rem;
+          text-transform: uppercase;
+          letter-spacing: 0.12em;
+          color: var(--success);
+          flex-shrink: 0;
+        }
+
+        .reveal-correct-letter {
+          font-size: 1.65rem;
+          font-weight: 600;
+          color: var(--success);
+          min-width: 2rem;
+          font-variant-numeric: tabular-nums;
+          line-height: 1;
+        }
+
+        .reveal-correct-text {
+          font-size: 1.1rem;
+          color: var(--text);
+          font-weight: 400;
+        }
+
+        .reveal-option-bar .option-header {
+          align-items: center;
+        }
+
+        .reveal-option-bar.correct {
+          border-left: 3px solid var(--success);
+          background: rgba(0, 255, 136, 0.06);
+        }
+
+        .reveal-pick-count {
+          font-size: 0.88rem;
+          font-weight: 600;
+          color: var(--muted);
+          white-space: nowrap;
+          margin-left: auto;
+          padding-left: 0.5rem;
+        }
+
+        .reveal-incident-row {
+          display: flex;
+          gap: 0.75rem;
+          margin-top: 1rem;
+          flex-wrap: wrap;
+          animation: revealIn 0.18s ease-out 0.1s both;
+        }
+
+        .reveal-chip {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.45rem;
+          padding: 0.45rem 0.9rem;
+          border: 1px solid var(--border-bright);
+          background: rgba(255, 255, 255, 0.62);
+          font-size: 0.82rem;
+        }
+
+        .reveal-chip-elim {
+          border-color: rgba(255, 51, 102, 0.4);
+          background: rgba(255, 51, 102, 0.05);
+        }
+
+        .reveal-chip-count {
+          font-weight: 700;
+          font-size: 1.15rem;
+          color: var(--text);
+          font-variant-numeric: tabular-nums;
+          line-height: 1;
+        }
+
+        .reveal-chip-elim .reveal-chip-count {
+          color: var(--error);
+        }
+
+        .reveal-chip-label {
+          font-size: 0.7rem;
+          text-transform: uppercase;
+          letter-spacing: 0.09em;
+          color: var(--muted);
+        }
     </style>
   </head>
   <body class="host-page app-shell">
@@ -1014,12 +1365,30 @@
           <div class="join-info">
             <div id="qr-code" role="img" aria-label="QR code for student join"></div>
             <div id="join-url" class="join-url-display" role="status" aria-live="polite" aria-atomic="true">Loading...</div>
+            <div class="join-action-row">
+              <button id="copy-join-button" class="primary-button join-copy-button" type="button">Copy Join Link</button>
+              <div id="join-copy-status" class="join-copy-status muted" role="status" aria-live="polite" aria-atomic="true"></div>
+            </div>
+            <div class="join-meta-list" aria-live="polite">
+              <div class="join-meta-item">
+                <span class="join-meta-label">Mode</span>
+                <span id="join-meta-mode" class="join-meta-value">Loading...</span>
+              </div>
+              <div class="join-meta-item">
+                <span class="join-meta-label">Server</span>
+                <span id="join-meta-server" class="join-meta-value">Loading...</span>
+              </div>
+              <div class="join-meta-item">
+                <span class="join-meta-label">Heartbeat</span>
+                <span id="join-meta-status" class="join-meta-value">Waiting...</span>
+              </div>
+            </div>
           </div>
         </div>
 
         <!-- Stats Card -->
         <div class="card card-stats">
-          <h2 class="card-title">2. Class Readiness</h2>
+          <h2 class="card-title">2. Class Snapshot</h2>
           <div class="stat-row">
             <div class="stat-item">
               <div id="stat-total" class="stat-value">0</div>
@@ -1034,6 +1403,10 @@
               <div class="stat-label">Alive</div>
             </div>
           </div>
+          <div class="readiness-meter" aria-hidden="true">
+            <div id="readiness-meter-fill" class="readiness-meter-fill"></div>
+          </div>
+          <p id="readiness-summary" class="muted readiness-summary">Waiting for students to join.</p>
         </div>
 
         <!-- Players Card -->
@@ -1107,7 +1480,6 @@
         </div>
       </div>
     </main>
-    <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
     <script src="/socket.io/socket.io.js"></script>
     <script src="/common.js"></script>
     <script src="/ai-simulation.js"></script>

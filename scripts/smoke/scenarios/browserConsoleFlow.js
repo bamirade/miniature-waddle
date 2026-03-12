@@ -4,6 +4,8 @@ const { JSDOM } = require('jsdom');
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
 const PUBLIC_DIR = path.join(REPO_ROOT, 'public');
+const CONFIG_PATH = path.join(REPO_ROOT, 'src', 'config.js');
+const GAME_STATE_PATH = path.join(REPO_ROOT, 'src', 'game', 'state.js');
 const UI_SETTLE_MS = 40;
 
 const HOST_HTML_PATH = path.join(PUBLIC_DIR, 'host.html');
@@ -14,6 +16,14 @@ const STUDENT_SCRIPT_PATH = path.join(PUBLIC_DIR, 'student.js');
 function assertCondition(condition, message) {
   if (!condition) {
     throw new Error(message);
+  }
+}
+
+function assertArrayEqual(actual, expected, message) {
+  const actualJson = JSON.stringify(actual);
+  const expectedJson = JSON.stringify(expected);
+  if (actualJson !== expectedJson) {
+    throw new Error(`${message}: expected ${expectedJson}, received ${actualJson}`);
   }
 }
 
@@ -242,14 +252,131 @@ function assertNoBlockingDiagnostics(diagnostics) {
   throw new Error(`${diagnostics.label} page emitted blocking diagnostics: ${details.join(' ; ')}`);
 }
 
-async function runBrowserConsoleFlow(context) {
-  const { baseUrl } = context;
+function getTextList(document, selector) {
+  return Array.from(document.querySelectorAll(selector)).map((element) => element.textContent.trim());
+}
 
-  const hostSocket = new FakeSocket('host');
-  const studentSocket = new FakeSocket('student');
+function dispatchKey(window, key) {
+  const event = new window.KeyboardEvent('keydown', {
+    key,
+    bubbles: true,
+    cancelable: true,
+  });
+  window.document.dispatchEvent(event);
+}
+
+function getLatestPick(socket) {
+  for (let index = socket.emitted.length - 1; index >= 0; index -= 1) {
+    const entry = socket.emitted[index];
+    if (entry.eventName === 'player:pick') {
+      return entry;
+    }
+  }
+
+  return null;
+}
+
+function withTemporaryLabelSet(labelSet, callback) {
+  const previousLabelSet = process.env.GAME_LABEL_SET;
+
+  if (typeof labelSet === 'string') {
+    process.env.GAME_LABEL_SET = labelSet;
+  } else {
+    delete process.env.GAME_LABEL_SET;
+  }
+
+  delete require.cache[CONFIG_PATH];
+  delete require.cache[GAME_STATE_PATH];
+
+  try {
+    return callback();
+  } finally {
+    delete require.cache[CONFIG_PATH];
+    delete require.cache[GAME_STATE_PATH];
+
+    if (typeof previousLabelSet === 'string') {
+      process.env.GAME_LABEL_SET = previousLabelSet;
+    } else {
+      delete process.env.GAME_LABEL_SET;
+    }
+  }
+}
+
+function loadConfigWithLabelSet(labelSet) {
+  return withTemporaryLabelSet(labelSet, () => require(CONFIG_PATH));
+}
+
+function assertConfigLabelSetParsing() {
+  const defaultConfig = loadConfigWithLabelSet(undefined);
+  assertCondition(defaultConfig.game.labelSet === 'true_false', 'default config labelSet should be true_false');
+
+  const yesNoConfig = loadConfigWithLabelSet('yes_no');
+  assertCondition(yesNoConfig.game.labelSet === 'yes_no', 'GAME_LABEL_SET=yes_no should select yes_no label set');
+
+  const invalidConfig = loadConfigWithLabelSet('invalid_label_set');
+  assertCondition(invalidConfig.game.labelSet === 'true_false', 'invalid GAME_LABEL_SET should fall back to true_false');
+}
+
+function assertEngineRoundProjection(labelSet, expectedOptions) {
+  withTemporaryLabelSet(labelSet, () => {
+    const gameStateModule = require(GAME_STATE_PATH);
+    const playerId = `smoke-${labelSet}-student`;
+    const state = gameStateModule.createGameState();
+
+    assertCondition(state.labelSet === labelSet, `${labelSet} game state labelSet mismatch`);
+
+    const addResult = gameStateModule.addPlayer(state, playerId, 'Smoke Student');
+    assertCondition(addResult && addResult.ok, `${labelSet} addPlayer should succeed`);
+
+    const readyResult = gameStateModule.setReady(state, playerId);
+    assertCondition(readyResult && readyResult.ok, `${labelSet} setReady should succeed`);
+
+    const startResult = gameStateModule.startGame(state);
+    assertCondition(startResult && startResult.ok, `${labelSet} startGame should succeed`);
+
+    gameStateModule.tick(state, state.phaseEndsAt);
+    assertCondition(state.phase === gameStateModule.PHASES.ROUND, `${labelSet} should reach round phase after countdown tick`);
+
+    const publicRound = gameStateModule.getPublicRoundState(state);
+    assertCondition(publicRound && publicRound.question, `${labelSet} public round should include a question`);
+    assertArrayEqual(publicRound.question.options, expectedOptions, `${labelSet} round options projection mismatch`);
+    assertCondition(publicRound.question.answerIndex === undefined, `${labelSet} live round should not expose answerIndex`);
+    assertCondition(Array.isArray(publicRound.capacities) && publicRound.capacities.length === expectedOptions.length, `${labelSet} capacities length mismatch`);
+    assertCondition(Array.isArray(publicRound.slotsLeft) && publicRound.slotsLeft.length === expectedOptions.length, `${labelSet} slotsLeft length mismatch`);
+  });
+}
+
+function getExpectedRuntimeLabelSet() {
+  const normalized = String(process.env.GAME_LABEL_SET || 'true_false').trim().toLowerCase();
+  return normalized === 'yes_no' ? 'yes_no' : 'true_false';
+}
+
+function assertRoundLabels(hostRuntime, studentRuntime, expectedKeys, expectedOptions, label) {
+  const hostFlashKeys = getTextList(hostRuntime.window.document, '.flash-option-label');
+  const hostRoundKeys = getTextList(hostRuntime.window.document, '#options-display .option-label');
+  const studentKeys = getTextList(studentRuntime.window.document, '#options-container .option-label');
+  const studentTexts = getTextList(studentRuntime.window.document, '#options-container .option-text');
+
+  assertArrayEqual(hostFlashKeys, expectedKeys, `${label} host flash option keys mismatch`);
+  assertArrayEqual(hostRoundKeys, expectedKeys, `${label} host round option keys mismatch`);
+  assertArrayEqual(studentKeys, expectedKeys, `${label} student option keys mismatch`);
+  assertArrayEqual(studentTexts, expectedOptions, `${label} student option text mismatch`);
+}
+
+async function runBrowserLabelCase({
+  baseUrl,
+  label,
+  options,
+  expectedKeys,
+  keyboardKey,
+  expectedPickedOption,
+  expectedConfigLabelSet,
+}) {
+  const hostSocket = new FakeSocket(`host-${label}`);
+  const studentSocket = new FakeSocket(`student-${label}`);
 
   const hostRuntime = await createPageRuntime({
-    label: 'host',
+    label: `host-${label}`,
     htmlPath: HOST_HTML_PATH,
     scriptPath: HOST_SCRIPT_PATH,
     pagePath: '/host',
@@ -258,24 +385,32 @@ async function runBrowserConsoleFlow(context) {
   });
 
   const studentRuntime = await createPageRuntime({
-    label: 'student',
+    label: `student-${label}`,
     htmlPath: STUDENT_HTML_PATH,
     scriptPath: STUDENT_SCRIPT_PATH,
     pagePath: '/student',
     baseUrl,
     socket: studentSocket,
     beforeEval: (window) => {
-      window.localStorage.setItem('nickname', 'Smoke Student');
+      window.localStorage.setItem('nickname', `Smoke Student ${label}`);
     },
   });
 
   try {
-    hostSocket.id = 'host-1';
-    studentSocket.id = 'student-1';
+    hostSocket.id = `host-${label}-1`;
+    studentSocket.id = `student-${label}-1`;
 
     hostSocket.trigger('connect');
     studentSocket.trigger('connect');
     await sleep(UI_SETTLE_MS);
+
+    const configResponse = await hostRuntime.window.fetch('/config').then((response) => response.json());
+    if (expectedConfigLabelSet) {
+      assertCondition(
+        configResponse && configResponse.labelSet === expectedConfigLabelSet,
+        `${label} /config labelSet mismatch`
+      );
+    }
 
     const lobby = {
       phase: 'lobby',
@@ -285,8 +420,8 @@ async function runBrowserConsoleFlow(context) {
       canStart: true,
       players: [
         {
-          id: 'student-1',
-          name: 'Smoke Student',
+          id: studentSocket.id,
+          name: `Smoke Student ${label}`,
           ready: true,
           status: 'alive',
           lives: 3,
@@ -299,12 +434,13 @@ async function runBrowserConsoleFlow(context) {
     const round = {
       roundNumber: 1,
       question: {
-        text: 'Which number is four?',
-        options: ['1', '2', '3', '4'],
+        text: '7 + 5 equals 12.',
+        options,
+        answerIndex: 0,
       },
-      capacities: [1, 1, 1, 1],
-      pickedCounts: [0, 0, 0, 0],
-      slotsLeft: [1, 1, 1, 1],
+      capacities: [1, 1],
+      pickedCounts: [0, 0],
+      slotsLeft: [1, 1],
       endsAt: Date.now() + 400,
     };
 
@@ -314,8 +450,8 @@ async function runBrowserConsoleFlow(context) {
       top: [
         {
           rank: 1,
-          id: 'student-1',
-          name: 'Smoke Student',
+          id: studentSocket.id,
+          name: `Smoke Student ${label}`,
           status: 'alive',
           eliminatedRound: null,
           eliminationReason: null,
@@ -324,8 +460,8 @@ async function runBrowserConsoleFlow(context) {
       leaderboard: [
         {
           rank: 1,
-          id: 'student-1',
-          name: 'Smoke Student',
+          id: studentSocket.id,
+          name: `Smoke Student ${label}`,
           status: 'alive',
           eliminatedRound: null,
           eliminationReason: null,
@@ -363,25 +499,37 @@ async function runBrowserConsoleFlow(context) {
     studentSocket.trigger('game:roundStarted', round);
     await sleep(UI_SETTLE_MS);
 
+    assertRoundLabels(hostRuntime, studentRuntime, expectedKeys, options, label);
+
+    dispatchKey(studentRuntime.window, keyboardKey);
+    await sleep(UI_SETTLE_MS);
+
+    const latestPick = getLatestPick(studentSocket);
+    assertCondition(latestPick, `${label} keyboard shortcut did not emit player:pick`);
+    assertCondition(
+      latestPick.payload && latestPick.payload.option === expectedPickedOption,
+      `${label} keyboard shortcut picked wrong option`
+    );
+
     hostSocket.trigger('round:update', {
       type: 'slots',
       capacities: round.capacities,
-      pickedCounts: [1, 0, 0, 0],
-      slotsLeft: [0, 1, 1, 1],
+      pickedCounts: expectedPickedOption === 0 ? [1, 0] : [0, 1],
+      slotsLeft: expectedPickedOption === 0 ? [0, 1] : [1, 0],
     });
     studentSocket.trigger('round:update', {
       type: 'slots',
-      slotsLeft: [0, 1, 1, 1],
+      slotsLeft: expectedPickedOption === 0 ? [0, 1] : [1, 0],
     });
     studentSocket.trigger('game:roundSlots', {
-      slotsLeft: [0, 1, 1, 1],
+      slotsLeft: expectedPickedOption === 0 ? [0, 1] : [1, 0],
     });
     await sleep(UI_SETTLE_MS);
 
     hostSocket.trigger('round:update', {
       type: 'reveal',
       question: round.question,
-      pickedByOption: [['student-1'], [], [], []],
+      pickedByOption: expectedPickedOption === 0 ? [[studentSocket.id], []] : [[], [studentSocket.id]],
     });
     hostSocket.trigger('game:state', {
       phase: 'reveal',
@@ -390,8 +538,22 @@ async function runBrowserConsoleFlow(context) {
     });
 
     studentSocket.trigger('game:state', { phase: 'reveal' });
-    studentSocket.trigger('game:roundReveal', { roundNumber: 1 });
+    studentSocket.trigger('game:roundReveal', {
+      roundNumber: 1,
+      question: round.question,
+      pickedByOption: expectedPickedOption === 0 ? [[studentSocket.id], []] : [[], [studentSocket.id]],
+      eliminatedThisRound: [],
+      lostLivesThisRound: [],
+    });
     await sleep(UI_SETTLE_MS);
+
+    const hostRevealKeys = getTextList(hostRuntime.window.document, '#options-display .reveal-option-bar .option-label');
+    const studentRevealValues = getTextList(studentRuntime.window.document, '.reveal-row-value');
+    assertArrayEqual(hostRevealKeys, expectedKeys, `${label} host reveal option keys mismatch`);
+    assertCondition(
+      studentRevealValues.some((value) => value.startsWith(`${expectedKeys[expectedPickedOption]} -`) || value.startsWith(`${expectedKeys[expectedPickedOption]} —`)),
+      `${label} student reveal card did not use expected option key`
+    );
 
     hostSocket.trigger('game:results', results);
     hostSocket.trigger('game:state', {
@@ -409,12 +571,12 @@ async function runBrowserConsoleFlow(context) {
     await sleep(UI_SETTLE_MS);
 
     const hostResultsCard = hostRuntime.window.document.getElementById('results-card');
-    assertCondition(hostResultsCard, 'host results card element missing');
-    assertCondition(!hostResultsCard.classList.contains('hidden'), 'host results card should be visible in finished phase');
+    assertCondition(hostResultsCard, `${label} host results card element missing`);
+    assertCondition(!hostResultsCard.classList.contains('hidden'), `${label} host results card should be visible in finished phase`);
 
     const studentResultsPhase = studentRuntime.window.document.getElementById('phase-results');
-    assertCondition(studentResultsPhase, 'student results phase element missing');
-    assertCondition(!studentResultsPhase.classList.contains('hidden'), 'student results phase should be visible in finished phase');
+    assertCondition(studentResultsPhase, `${label} student results phase element missing`);
+    assertCondition(!studentResultsPhase.classList.contains('hidden'), `${label} student results phase should be visible in finished phase`);
 
     assertNoBlockingDiagnostics(hostRuntime.diagnostics);
     assertNoBlockingDiagnostics(studentRuntime.diagnostics);
@@ -422,6 +584,65 @@ async function runBrowserConsoleFlow(context) {
     hostRuntime.dom.window.close();
     studentRuntime.dom.window.close();
   }
+}
+
+async function runBrowserConsoleFlow(context) {
+  const { baseUrl } = context;
+  const expectedRuntimeLabelSet = getExpectedRuntimeLabelSet();
+
+  assertConfigLabelSetParsing();
+  assertEngineRoundProjection('true_false', ['True', 'False']);
+  assertEngineRoundProjection('yes_no', ['Yes', 'No']);
+
+  await runBrowserLabelCase({
+    baseUrl,
+    label: 'true_false',
+    options: ['True', 'False'],
+    expectedKeys: ['T', 'F'],
+    keyboardKey: 't',
+    expectedPickedOption: 0,
+    expectedConfigLabelSet: expectedRuntimeLabelSet,
+  });
+
+  await runBrowserLabelCase({
+    baseUrl,
+    label: 'true_false_numeric',
+    options: ['True', 'False'],
+    expectedKeys: ['T', 'F'],
+    keyboardKey: '2',
+    expectedPickedOption: 1,
+    expectedConfigLabelSet: expectedRuntimeLabelSet,
+  });
+
+  await runBrowserLabelCase({
+    baseUrl,
+    label: 'yes_no',
+    options: ['Yes', 'No'],
+    expectedKeys: ['Y', 'N'],
+    keyboardKey: 'y',
+    expectedPickedOption: 0,
+    expectedConfigLabelSet: expectedRuntimeLabelSet,
+  });
+
+  await runBrowserLabelCase({
+    baseUrl,
+    label: 'yes_no_negative',
+    options: ['Yes', 'No'],
+    expectedKeys: ['Y', 'N'],
+    keyboardKey: 'n',
+    expectedPickedOption: 1,
+    expectedConfigLabelSet: expectedRuntimeLabelSet,
+  });
+
+  await runBrowserLabelCase({
+    baseUrl,
+    label: 'yes_no_numeric',
+    options: ['Yes', 'No'],
+    expectedKeys: ['Y', 'N'],
+    keyboardKey: '2',
+    expectedPickedOption: 1,
+    expectedConfigLabelSet: expectedRuntimeLabelSet,
+  });
 }
 
 module.exports = {

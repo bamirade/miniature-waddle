@@ -25,12 +25,12 @@ const PHASES = Object.freeze({
  * @typedef {Object} GameTimings
  * @property {number} COUNTDOWN_MS - Duration of countdown phase (3000ms = 3 seconds)
  * @property {number} ROUND_OPEN_MS - Time players have to pick (10000ms = 10 seconds)
- * @property {number} REVEAL_MS - Time to show results (2000ms = 2 seconds)
+ * @property {number} REVEAL_MS - Time to show results (3000ms = 3 seconds)
  */
 const TIMINGS = Object.freeze({
   COUNTDOWN_MS: 3000,
   ROUND_OPEN_MS: 10000,
-  REVEAL_MS: 2000,
+  REVEAL_MS: 3000,
 });
 
 /**
@@ -38,12 +38,12 @@ const TIMINGS = Object.freeze({
  * @typedef {Object} GameConfig
  * @property {number} STARTING_LIVES - Lives each player starts with
  * @property {number} SURVIVOR_THRESHOLD - Max alive players before game ends(value: 3)
- * @property {number} OPTIONS_PER_QUESTION - Number of answer options (A/B/C/D = 4)
+ * @property {number} OPTIONS_PER_QUESTION - Number of answer options (True/False = 2)
  */
 const GAME_CONFIG = Object.freeze({
   STARTING_LIVES: 3,
   SURVIVOR_THRESHOLD: 3,
-  OPTIONS_PER_QUESTION: 4,
+  OPTIONS_PER_QUESTION: 2,
 });
 
 /**
@@ -66,6 +66,7 @@ const EVENT_NAMES = Object.freeze({
 const EVENT_PAYLOADS = Object.freeze({
   LOBBY_STATE: {
     phase: 'lobby',
+    lobbySessionId: 'lobby-1710150000000-ab12cd34',
     totalPlayers: 0,
     aliveCount: 0,
     readyCount: 0,
@@ -100,19 +101,19 @@ const EVENT_PAYLOADS = Object.freeze({
     phase: 'round',
     roundNumber: 1,
     aliveCount: 0,
-    question: { id: 'q001', text: 'Question text', options: ['A', 'B', 'C', 'D'] },
-    capacities: [0, 0, 0, 0],
-    slotsLeft: [0, 0, 0, 0],
-    pickedCounts: [0, 0, 0, 0],
+    question: { id: 'q001', text: 'Question text', options: ['True', 'False'] },
+    capacities: [0, 0],
+    slotsLeft: [0, 0],
+    pickedCounts: [0, 0],
     endsAt: 0,
   },
   ROUND_SLOTS: {
     phase: 'round',
     roundNumber: 1,
     aliveCount: 0,
-    capacities: [0, 0, 0, 0],
-    slotsLeft: [0, 0, 0, 0],
-    pickedCounts: [0, 0, 0, 0],
+    capacities: [0, 0],
+    slotsLeft: [0, 0],
+    pickedCounts: [0, 0],
   },
   PICK_RESULT: {
     phase: 'round',
@@ -122,7 +123,7 @@ const EVENT_PAYLOADS = Object.freeze({
     status: 'accepted',
     reason: 'picked',
     eliminated: false,
-    slotsLeft: [0, 0, 0, 0],
+    slotsLeft: [0, 0],
   },
   PLAYER_LIFE_LOST: {
     roundNumber: 1,
@@ -145,8 +146,8 @@ const EVENT_PAYLOADS = Object.freeze({
     phase: 'reveal',
     roundNumber: 1,
     aliveCount: 0,
-    question: { id: 'q001', text: 'Question text', options: ['A', 'B', 'C', 'D'], answerIndex: 0 },
-    pickedByOption: [[], [], [], []],
+    question: { id: 'q001', text: 'Question text', options: ['True', 'False'], answerIndex: 0 },
+    pickedByOption: [[], []],
     eliminatedThisRound: [
       { playerId: 'socketId', name: 'Player', reason: 'wrong', option: 1 },
     ],

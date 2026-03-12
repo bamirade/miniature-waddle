@@ -5,8 +5,10 @@
 const path = require('path');
 const http = require('http');
 const express = require('express');
+const QRCode = require('qrcode');
 const { Server } = require('socket.io');
 const config = require('../config');
+const packageJson = require('../../package.json');
 const { getPreferredLanIpv4 } = require('../utils/network');
 const { createGameState, tick, getPublicLobbyState, getPublicRoundState, getResults, PHASES } = require('../game/state');
 const { createSocketHandlers } = require('./socketHandlers');
@@ -45,6 +47,37 @@ function createServer(options = {}) {
   const LAN_IP = process.env.HOST_IP || getPreferredLanIpv4();
   const JOIN_URL = `http://${LAN_IP}:${port}/`;
   const gameState = createGameState();
+  const startedAt = Date.now();
+
+  function buildServerSnapshot() {
+    const lobby = getPublicLobbyState(gameState);
+    return {
+      appName: packageJson.productName || packageJson.name,
+      version: packageJson.version,
+      startedAt,
+      uptimeMs: Date.now() - startedAt,
+      hostIp: LAN_IP,
+      joinUrl: JOIN_URL,
+      hostDashboardUrl: `http://localhost:${port}/host`,
+      port,
+      labelSet: gameState.labelSet,
+      phase: gameState.phase,
+      roundNumber: gameState.roundNumber,
+      totalPlayers: lobby.totalPlayers,
+      readyCount: lobby.readyCount,
+      aliveCount: lobby.aliveCount,
+      canStart: lobby.canStart,
+      timings: {
+        countdownMs: config.game.countdownMs,
+        roundOpenMs: config.game.roundOpenMs,
+        revealMs: config.game.revealMs,
+      },
+      startPolicy: {
+        initialLaunchRequiresReady: true,
+        replayFromResultsAllowed: true,
+      },
+    };
+  }
 
   // Serve static files
   app.use(express.static(publicDir));
@@ -64,11 +97,42 @@ function createServer(options = {}) {
 
   app.get('/config', (req, res) => {
     res.json({
-      port,
-      joinUrl: JOIN_URL,
-      hostIp: LAN_IP,
+      ...buildServerSnapshot(),
       ip: LAN_IP,
     });
+  });
+
+  app.get('/health', (req, res) => {
+    res.json({
+      status: 'ok',
+      ...buildServerSnapshot(),
+    });
+  });
+
+  app.get('/qr.svg', async (req, res) => {
+    const qrText = typeof req.query.text === 'string' && req.query.text.trim()
+      ? req.query.text.trim()
+      : JOIN_URL;
+
+    try {
+      const svg = await QRCode.toString(qrText, {
+        type: 'svg',
+        margin: 1,
+        width: 160,
+        color: {
+          dark: '#000000',
+          light: '#FFFFFF',
+        },
+      });
+
+      res.type('image/svg+xml');
+      res.send(svg);
+    } catch (error) {
+      res.status(500).json({
+        status: 'error',
+        reason: 'qr_generation_failed',
+      });
+    }
   });
 
   // Build game state payload helper
@@ -115,10 +179,12 @@ function createServer(options = {}) {
       const onListening = () => {
         server.off('error', onError);
         console.log(`=== Game Host Server Started ===`);
+        console.log(`Version: ${packageJson.version} | Label set: ${gameState.labelSet}`);
         console.log(`Server listening on all interfaces (${host}:${port})`);
         console.log(`Local address: http://localhost:${port}/host`);
         console.log(`Network address: ${JOIN_URL}`);
         console.log(`Students join at: ${JOIN_URL}`);
+        console.log(`Health check: http://localhost:${port}/health`);
         console.log(`================================`);
         resolve({
           server,
@@ -127,6 +193,7 @@ function createServer(options = {}) {
           port,
           joinUrl: JOIN_URL,
           lanIp: LAN_IP,
+          startedAt,
         });
       };
 

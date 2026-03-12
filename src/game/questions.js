@@ -1,185 +1,214 @@
 const questions = [
   {
     id: 'q001',
-    text: 'What is 7 + 5?',
-    options: ['10', '11', '12', '13'],
-    answerIndex: 2
-  },
-  {
-    id: 'q002',
-    text: 'What is 9 × 3?',
-    options: ['18', '24', '27', '30'],
-    answerIndex: 2
-  },
-  {
-    id: 'q003',
-    text: 'What is 15 - 6?',
-    options: ['7', '8', '9', '10'],
-    answerIndex: 2
-  },
-  {
-    id: 'q004',
-    text: 'What is 24 ÷ 6?',
-    options: ['3', '4', '5', '6'],
-    answerIndex: 1
-  },
-  {
-    id: 'q005',
-    text: 'Complete the pattern: 2, 4, 6, ?',
-    options: ['7', '8', '9', '10'],
-    answerIndex: 1
-  },
-  {
-    id: 'q006',
-    text: 'Binary for decimal 5 is:',
-    options: ['100', '101', '110', '111'],
-    answerIndex: 1
-  },
-  {
-    id: 'q007',
-    text: 'Which is an input device?',
-    options: ['Monitor', 'Keyboard', 'Speaker', 'Projector'],
-    answerIndex: 1
-  },
-  {
-    id: 'q008',
-    text: 'Which stores files long-term?',
-    options: ['RAM', 'Cache', 'SSD', 'CPU'],
-    answerIndex: 2
-  },
-  {
-    id: 'q009',
-    text: 'HTML is mainly used to:',
-    options: ['Style pages', 'Structure pages', 'Run servers', 'Edit photos'],
-    answerIndex: 1
-  },
-  {
-    id: 'q010',
-    text: 'CSS is mainly used to:',
-    options: ['Style pages', 'Store data', 'Compile code', 'Send email'],
+    text: '7 + 5 equals 12.',
+    options: ['True', 'False'],
     answerIndex: 0
   },
   {
+    id: 'q002',
+    text: '9 × 3 equals 27.',
+    options: ['True', 'False'],
+    answerIndex: 0
+  },
+  {
+    id: 'q003',
+    text: '15 - 6 equals 10.',
+    options: ['True', 'False'],
+    answerIndex: 1
+  },
+  {
+    id: 'q004',
+    text: '24 ÷ 6 equals 4.',
+    options: ['True', 'False'],
+    answerIndex: 0
+  },
+  {
+    id: 'q005',
+    text: 'The pattern 2, 4, 6 continues with 8.',
+    options: ['True', 'False'],
+    answerIndex: 0
+  },
+  {
+    id: 'q006',
+    text: 'Decimal 5 in binary is 101.',
+    options: ['True', 'False'],
+    answerIndex: 0
+  },
+  {
+    id: 'q007',
+    text: 'A keyboard is an input device.',
+    options: ['True', 'False'],
+    answerIndex: 0
+  },
+  {
+    id: 'q008',
+    text: 'RAM is the best place for long-term file storage.',
+    options: ['True', 'False'],
+    answerIndex: 1
+  },
+  {
+    id: 'q009',
+    text: 'HTML is mainly used to structure web pages.',
+    options: ['True', 'False'],
+    answerIndex: 0
+  },
+  {
+    id: 'q010',
+    text: 'CSS is mainly used to store database records.',
+    options: ['True', 'False'],
+    answerIndex: 1
+  },
+  {
     id: 'q011',
-    text: 'JavaScript in a browser can:',
-    options: ['Change page content', 'Replace battery', 'Print paper', 'Fix Wi-Fi hardware'],
+    text: 'JavaScript in a browser can change page content.',
+    options: ['True', 'False'],
     answerIndex: 0
   },
   {
     id: 'q012',
-    text: 'Best loop for known repeat count:',
-    options: ['for loop', 'while true', 'switch', 'try/catch'],
+    text: 'A for loop is useful when the repeat count is known.',
+    options: ['True', 'False'],
     answerIndex: 0
   },
   {
     id: 'q013',
-    text: 'If x = 10, is x > 7 true?',
-    options: ['True', 'False', 'Only in Python', 'Only in C'],
+    text: 'If x = 10, then x > 7 is true.',
+    options: ['True', 'False'],
     answerIndex: 0
   },
   {
     id: 'q014',
-    text: 'In JavaScript, strict equality is:',
-    options: ['==', '=', '===', '=>'],
-    answerIndex: 2
+    text: 'In JavaScript, strict equality is written as ===.',
+    options: ['True', 'False'],
+    answerIndex: 0
   },
   {
     id: 'q015',
-    text: 'Smallest unit of data is a:',
-    options: ['Byte', 'Bit', 'Word', 'Block'],
-    answerIndex: 1
+    text: 'A bit is smaller than a byte.',
+    options: ['True', 'False'],
+    answerIndex: 0
   },
   {
     id: 'q016',
-    text: 'How many bits are in 1 byte?',
-    options: ['4', '8', '16', '32'],
-    answerIndex: 1
+    text: 'One byte contains 8 bits.',
+    options: ['True', 'False'],
+    answerIndex: 0
   },
   {
     id: 'q017',
-    text: 'URL stands for:',
-    options: ['Uniform Resource Locator', 'Universal Read Link', 'User Route Level', 'Unified Remote Log'],
+    text: 'URL stands for Uniform Resource Locator.',
+    options: ['True', 'False'],
     answerIndex: 0
   },
   {
     id: 'q018',
-    text: 'Which password is strongest?',
-    options: ['password123', 'qwerty', 'Mango!7River#2', 'student'],
-    answerIndex: 2
-  },
-  {
-    id: 'q019',
-    text: 'All cats are mammals. Luna is a cat. So Luna is a:',
-    options: ['Bird', 'Mammal', 'Fish', 'Reptile'],
-    answerIndex: 1
-  },
-  {
-    id: 'q020',
-    text: 'The opposite branch of if is:',
-    options: ['then', 'switch', 'case', 'else'],
-    answerIndex: 3
-  },
-  {
-    id: 'q021',
-    text: 'First array index in JavaScript is:',
-    options: ['0', '1', '-1', 'Depends'],
+    text: 'The password "Mango!7River#2" is stronger than "password123".',
+    options: ['True', 'False'],
     answerIndex: 0
   },
   {
-    id: 'q022',
-    text: 'Print to browser console using:',
-    options: ['print()', 'console.log()', 'echo()', 'stdout()'],
+    id: 'q019',
+    text: 'All cats are mammals.',
+    options: ['True', 'False'],
+    answerIndex: 0
+  },
+  {
+    id: 'q020',
+    text: 'In many languages, else handles the opposite branch of if.',
+    options: ['True', 'False'],
+    answerIndex: 0
+  },
+  {
+    id: 'q021',
+    text: 'The first array index in JavaScript is 1.',
+    options: ['True', 'False'],
     answerIndex: 1
+  },
+  {
+    id: 'q022',
+    text: 'console.log() prints to the browser console.',
+    options: ['True', 'False'],
+    answerIndex: 0
   },
   {
     id: 'q023',
-    text: 'Smallest to largest order is called:',
-    options: ['Descending', 'Ascending', 'Random', 'Circular'],
-    answerIndex: 1
+    text: 'Ascending order means smallest to largest.',
+    options: ['True', 'False'],
+    answerIndex: 0
   },
   {
     id: 'q024',
-    text: 'What is 3 squared?',
-    options: ['6', '8', '9', '12'],
-    answerIndex: 2
-  },
-  {
-    id: 'q025',
-    text: '90 minutes equals:',
-    options: ['1 hour 20 min', '1 hour 30 min', '2 hours', '45 min'],
+    text: '3 squared equals 6.',
+    options: ['True', 'False'],
     answerIndex: 1
   },
   {
+    id: 'q025',
+    text: '90 minutes equals 1 hour 30 minutes.',
+    options: ['True', 'False'],
+    answerIndex: 0
+  },
+  {
     id: 'q026',
-    text: '100% of 45 is:',
-    options: ['4.5', '22.5', '45', '90'],
-    answerIndex: 2
+    text: '100% of 45 is 45.',
+    options: ['True', 'False'],
+    answerIndex: 0
   },
   {
     id: 'q027',
-    text: 'True OR False evaluates to:',
-    options: ['True', 'False', 'Error', 'Null'],
+    text: 'True OR False evaluates to True.',
+    options: ['True', 'False'],
     answerIndex: 0
   },
   {
     id: 'q028',
-    text: 'True AND False evaluates to:',
-    options: ['True', 'False', 'Maybe', 'Undefined'],
+    text: 'True AND False evaluates to True.',
+    options: ['True', 'False'],
     answerIndex: 1
   },
   {
     id: 'q029',
-    text: 'Which number is odd?',
-    options: ['2', '4', '7', '8'],
-    answerIndex: 2
+    text: '7 is an odd number.',
+    options: ['True', 'False'],
+    answerIndex: 0
   },
   {
     id: 'q030',
-    text: 'Which number is prime?',
-    options: ['9', '10', '11', '12'],
-    answerIndex: 2
+    text: '11 is a prime number.',
+    options: ['True', 'False'],
+    answerIndex: 0
   }
 ];
+
+const BINARY_LABEL_SETS = Object.freeze({
+  true_false: Object.freeze(['True', 'False']),
+  yes_no: Object.freeze(['Yes', 'No']),
+  agree_disagree: Object.freeze(['Agree', 'Disagree']),
+});
+
+function normalizeLabelSetKey(labelSetKey) {
+  const normalized = String(labelSetKey || '').trim().toLowerCase();
+  return Object.prototype.hasOwnProperty.call(BINARY_LABEL_SETS, normalized)
+    ? normalized
+    : 'true_false';
+}
+
+function getLabelSetOptions(labelSetKey) {
+  const key = normalizeLabelSetKey(labelSetKey);
+  return [...BINARY_LABEL_SETS[key]];
+}
+
+function projectQuestionToLabelSet(question, labelSetKey) {
+  if (!question || typeof question !== 'object') {
+    return question;
+  }
+
+  return {
+    ...question,
+    options: getLabelSetOptions(labelSetKey),
+  };
+}
 
 function getRandomQuestion(excludeIdsSet = new Set()) {
   const excluded = excludeIdsSet instanceof Set
@@ -193,6 +222,10 @@ function getRandomQuestion(excludeIdsSet = new Set()) {
 }
 
 module.exports = {
+  BINARY_LABEL_SETS,
   questions,
-  getRandomQuestion
+  getRandomQuestion,
+  normalizeLabelSetKey,
+  getLabelSetOptions,
+  projectQuestionToLabelSet,
 };

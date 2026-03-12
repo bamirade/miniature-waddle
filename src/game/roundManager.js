@@ -3,8 +3,8 @@
  * Handles round start, transitions, and reveal logic
  */
 
-const { PHASES, TIMINGS, EVENT_NAMES } = require('./constants');
-const { getRandomQuestion } = require('./questions');
+const { PHASES, TIMINGS, EVENT_NAMES, GAME_CONFIG } = require('./constants');
+const { getRandomQuestion, projectQuestionToLabelSet } = require('./questions');
 const { eventAll } = require('./utils');
 const { computeCapacities } = require('./capacityCalculator');
 const { getAlivePlayers, getAliveCount } = require('./playerManager');
@@ -25,13 +25,18 @@ function startNextRound(state, now, events) {
     return;
   }
 
-  const question = getRandomQuestion(state.usedQuestionIds);
-  state.usedQuestionIds.add(question.id);
+  const canonicalQuestion = getRandomQuestion(state.usedQuestionIds);
+  const question = projectQuestionToLabelSet(canonicalQuestion, state.labelSet);
+  state.usedQuestionIds.add(canonicalQuestion.id);
+
+  const optionCount = Array.isArray(question.options) && question.options.length > 0
+    ? question.options.length
+    : GAME_CONFIG.OPTIONS_PER_QUESTION;
 
   state.roundNumber += 1;
   state.currentQuestion = question;
   state.capacities = computeCapacities(alivePlayers.length, state._rng);
-  state.pickedByOption = [[], [], [], []];
+  state.pickedByOption = Array.from({ length: optionCount }, () => []);
   state.lastRoundEliminations = [];
 
   // Reset player round state
@@ -52,7 +57,7 @@ function startNextRound(state, now, events) {
     question: toPublicQuestion(state.currentQuestion, false),
     capacities: [...state.capacities],
     slotsLeft: getSlotsLeft(state),
-    pickedCounts: [0, 0, 0, 0],
+    pickedCounts: new Array(optionCount).fill(0),
     endsAt: state.phaseEndsAt
   }));
 }

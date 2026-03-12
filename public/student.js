@@ -10,15 +10,104 @@
   let myLives = 3;
   let isEliminated = false;
   let hasPicked = false;
+  let myPickedOption = null;
+  let isReady = false;
   let currentRoundNumber = 0;
   let currentQuestion = null;
-  let currentSlotsLeft = [0, 0, 0, 0];
+  let currentSlotsLeft = [0, 0];
+  let currentLobbySessionId = null;
   let roundEndTime = null;
   let timerInterval = null;
   let lastAnnouncement = '';
 
   const LOCKED_IN_COPY = 'Answer locked. Waiting for reveal.';
   const REVEAL_WAIT_COPY = 'Checking answers...';
+  const READY_SESSION_KEY = 'lobbyReadySessionId';
+  const LEGACY_READY_FLAG_KEY = 'lobbyReady';
+
+  function getOptionCount(question = currentQuestion) {
+    const optionLength = question && Array.isArray(question.options) ? question.options.length : 0;
+    return optionLength > 0 ? optionLength : 2;
+  }
+
+  function createDefaultSlots(question = currentQuestion) {
+    return new Array(getOptionCount(question)).fill(0);
+  }
+
+  function normalizeSlots(slotsLeft, question = currentQuestion) {
+    const fallback = createDefaultSlots(question);
+    if (!Array.isArray(slotsLeft)) {
+      return fallback;
+    }
+
+    return fallback.map((_, index) => {
+      const value = slotsLeft[index];
+      return typeof value === 'number' ? value : 0;
+    });
+  }
+
+  function deriveOptionKeys(options) {
+    const normalizedOptions = Array.isArray(options) ? options : [];
+    const usedKeys = new Set();
+
+    return normalizedOptions.map((optionText, index) => {
+      const letters = String(optionText || '').toUpperCase().match(/[A-Z]/g) || [];
+      for (const letter of letters) {
+        if (!usedKeys.has(letter)) {
+          usedKeys.add(letter);
+          return letter;
+        }
+      }
+
+      const fallback = `${index + 1}`;
+      usedKeys.add(fallback);
+      return fallback;
+    });
+  }
+
+  function getOptionKey(optionText, index, options) {
+    const keys = deriveOptionKeys(Array.isArray(options) ? options : [optionText]);
+    return keys[index] || `${index + 1}`;
+  }
+
+  function buildKeyboardOptionMap(question = currentQuestion) {
+    const optionCount = getOptionCount(question);
+    const options = question && Array.isArray(question.options) ? question.options : [];
+    const optionKeys = deriveOptionKeys(options);
+    const optionMap = {};
+
+    optionKeys.forEach((optionKey, index) => {
+      const normalizedKey = String(optionKey || '').trim().toLowerCase();
+      if (normalizedKey && !Object.prototype.hasOwnProperty.call(optionMap, normalizedKey)) {
+        optionMap[normalizedKey] = index;
+      }
+    });
+
+    for (let index = 0; index < optionCount; index += 1) {
+      optionMap[`${index + 1}`] = index;
+    }
+
+    return optionMap;
+  }
+
+  function getRoundAnnounceCopy(question = currentQuestion) {
+    const options = question && Array.isArray(question.options) ? question.options : [];
+    if (options.length >= 2) {
+      return `Tap ${options[0]} or ${options[1]} before slots fill.`;
+    }
+
+    return 'Tap an option before slots fill.';
+  }
+
+  function replayMotionClass(element, className) {
+    if (!element || !className) {
+      return;
+    }
+
+    element.classList.remove(className);
+    void element.offsetWidth;
+    element.classList.add(className);
+  }
 
   // Prevent accidental navigation during active game
   window.addEventListener('beforeunload', (e) => {
@@ -40,6 +129,10 @@
 
   const elements = {
     lobbyPlayerCount: document.getElementById('lobby-player-count'),
+    lobbyHelpText: document.getElementById('lobby-help-text'),
+    lobbyJoinedCount: document.getElementById('lobby-joined-count'),
+    lobbyReadyCount: document.getElementById('lobby-ready-count'),
+    lobbyReadyRule: document.getElementById('lobby-ready-rule'),
     countdownValue: document.getElementById('countdown-value'),
     roundNumber: document.getElementById('round-number'),
     questionText: document.getElementById('question-text'),
@@ -53,7 +146,9 @@
     phaseIndicator: document.getElementById('phase-indicator'),
     roundTimer: document.getElementById('round-timer'),
     livesDisplay: document.getElementById('lives-display'),
-    livesText: document.getElementById('lives-text')
+    livesText: document.getElementById('lives-text'),
+    lobbyReadyButton: document.getElementById('lobby-ready-button'),
+    lobbyReadyConfirm: document.getElementById('lobby-ready-confirm')
   };
 
   // Connection Status Management
@@ -70,6 +165,49 @@
 
     elements.connectionText.textContent = statusText;
     elements.connectionStatus.setAttribute('aria-label', `Connection status: ${statusText}`);
+  }
+
+  function updateLobbySummary(data) {
+    if (!data) {
+      return;
+    }
+
+    const totalPlayers = data.totalPlayers || 0;
+    const readyCount = data.readyCount || 0;
+
+    if (elements.lobbyPlayerCount) {
+      elements.lobbyPlayerCount.textContent = `${totalPlayers} player(s) joined`;
+    }
+
+    if (elements.lobbyJoinedCount) {
+      elements.lobbyJoinedCount.textContent = String(totalPlayers);
+    }
+
+    if (elements.lobbyReadyCount) {
+      elements.lobbyReadyCount.textContent = String(readyCount);
+    }
+
+    if (elements.lobbyReadyRule) {
+      if (totalPlayers === 0) {
+        elements.lobbyReadyRule.textContent = 'The host can start once classmates join and at least one player is ready.';
+      } else if (readyCount === 0) {
+        elements.lobbyReadyRule.textContent = 'The host unlocks start as soon as one student taps Ready.';
+      } else if (readyCount === totalPlayers) {
+        elements.lobbyReadyRule.textContent = 'Everyone is checked in. Watch the host countdown.';
+      } else {
+        elements.lobbyReadyRule.textContent = `${readyCount} ready so far. More classmates can still tap Ready before launch.`;
+      }
+    }
+
+    if (elements.lobbyHelpText) {
+      if (isReady) {
+        elements.lobbyHelpText.textContent = 'You are checked in. Keep this screen open and wait for the host countdown.';
+      } else if (totalPlayers === 0) {
+        elements.lobbyHelpText.textContent = 'Keep this screen open. Tap Ready when you are prepared to start.';
+      } else {
+        elements.lobbyHelpText.textContent = 'Tap Ready when you are set. The host can start once at least one student is ready.';
+      }
+    }
   }
 
   function announcePhaseMessage(message) {
@@ -101,7 +239,7 @@
     const message = {
       lobby: "You're in the lobby. Keep this screen open. Round starts on host countdown.",
       countdown: 'Round starts in.',
-      round: 'Choose before slots fill.',
+      round: getRoundAnnounceCopy(),
       reveal: REVEAL_WAIT_COPY,
       eliminated: 'You have been eliminated. Waiting for final standings.',
       results: 'Final standings.'
@@ -118,6 +256,10 @@
     elements.pickStatus.textContent = message;
     elements.pickStatus.dataset.state = state;
     elements.pickStatus.classList.toggle('hidden', !visible);
+
+    if (visible) {
+      replayMotionClass(elements.pickStatus, 'status-enter');
+    }
   }
 
   function resetPickStatus() {
@@ -240,12 +382,26 @@
 
   function showPhase(phaseName) {
     document.documentElement.setAttribute('data-phase', phaseName);
+    let activeElement = null;
+
     Object.keys(phases).forEach((key) => {
       const element = phases[key];
       if (element) {
-        element.classList.toggle('hidden', key !== phaseName);
+        const isActive = key === phaseName;
+        element.classList.toggle('hidden', !isActive);
+        element.classList.remove('phase-enter');
+
+        if (isActive) {
+          activeElement = element;
+        }
       }
     });
+
+    if (activeElement) {
+      replayMotionClass(activeElement, 'phase-enter');
+    }
+
+    replayMotionClass(elements.phaseIndicator, 'motion-refresh');
   }
 
   function renderOptions() {
@@ -253,10 +409,11 @@
       return;
     }
 
+    const normalizedSlotsLeft = normalizeSlots(currentSlotsLeft, currentQuestion);
     elements.optionsContainer.innerHTML = '';
 
     const availableOptions = currentQuestion.options.filter((_, index) => {
-      return (currentSlotsLeft[index] || 0) > 0;
+      return (normalizedSlotsLeft[index] || 0) > 0;
     });
 
     // Empty state: all options are full
@@ -273,7 +430,7 @@
     }
 
     currentQuestion.options.forEach((optionText, index) => {
-      const slotsLeft = currentSlotsLeft[index] || 0;
+      const slotsLeft = normalizedSlotsLeft[index] || 0;
 
       // Hide options that are full (0 slots left)
       if (slotsLeft === 0) {
@@ -285,17 +442,17 @@
       button.type = 'button';
       button.disabled = hasPicked || isEliminated || currentPhase !== 'round';
       button.setAttribute('data-option-index', index);
-      button.setAttribute('aria-label', `Option ${String.fromCharCode(65 + index)}: ${optionText}. ${slotsLeft} slot${slotsLeft !== 1 ? 's' : ''} remaining`);
+      button.setAttribute('aria-label', `${optionText}. ${slotsLeft} slot${slotsLeft !== 1 ? 's' : ''} remaining`);
 
       // Add urgent styling for last slot
       if (slotsLeft === 1 && !hasPicked && currentPhase === 'round') {
         button.classList.add('urgent');
-        button.setAttribute('aria-label', `Option ${String.fromCharCode(65 + index)}: ${optionText}. Last slot available, pick now.`);
+        button.setAttribute('aria-label', `${optionText}. Last slot available, pick now.`);
       }
 
       const label = document.createElement('span');
       label.className = 'option-label';
-      label.textContent = String.fromCharCode(65 + index);
+      label.textContent = getOptionKey(optionText, index, currentQuestion.options);
 
       const text = document.createElement('span');
       text.className = 'option-text';
@@ -324,6 +481,7 @@
 
   function pickOption(optionIndex) {
     hasPicked = true;
+    myPickedOption = optionIndex;
     socket.emit('player:pick', { option: optionIndex });
 
     // Visual feedback
@@ -345,7 +503,7 @@
   }
 
   function updateSlots(slotsLeft) {
-    currentSlotsLeft = slotsLeft || [0, 0, 0, 0];
+    currentSlotsLeft = normalizeSlots(slotsLeft, currentQuestion);
     renderOptions();
   }
 
@@ -376,6 +534,206 @@
     if (window.appCommon && window.appCommon.showToast) {
       window.appCommon.showToast('You have been eliminated', 'error', 3000);
     }
+  }
+
+  // Build and render the personal reveal card in place of the options grid
+  function renderRevealCard(data) {
+    if (!elements.optionsContainer) return;
+
+    const question = data && data.question;
+    const correctIndex = question && typeof question.answerIndex === 'number' ? question.answerIndex : null;
+    const options = (question && question.options) || [];
+
+    // Determine my picked option: prefer tracked value, fallback to scanning pickedByOption
+    let pickedIndex = myPickedOption;
+    if (pickedIndex === null && data && Array.isArray(data.pickedByOption) && myPlayerId) {
+      data.pickedByOption.forEach((arr, idx) => {
+        if (Array.isArray(arr) && arr.includes(myPlayerId)) {
+          pickedIndex = idx;
+        }
+      });
+    }
+
+    const formatRevealOption = (optionIndex) => {
+      const optionText = options[optionIndex] || '';
+      const optionKey = getOptionKey(optionText, optionIndex, options);
+      return optionText ? `${optionKey} — ${optionText}` : optionKey;
+    };
+
+    const myPickText = pickedIndex !== null
+      ? formatRevealOption(pickedIndex)
+      : 'No pick (timeout)';
+
+    const correctText = correctIndex !== null
+      ? formatRevealOption(correctIndex)
+      : '—';
+
+    // Outcome determination: use incident arrays when available
+    const eliminatedMe = Array.isArray(data && data.eliminatedThisRound)
+      ? data.eliminatedThisRound.find((e) => e.playerId === myPlayerId)
+      : null;
+    const lifeLostMe = Array.isArray(data && data.lostLivesThisRound)
+      ? data.lostLivesThisRound.find((e) => e.playerId === myPlayerId)
+      : null;
+
+    let outcomeLabel = '';
+    let outcomeState = '';
+    const hasIncidentData = Array.isArray(data && data.eliminatedThisRound);
+
+    if (eliminatedMe) {
+      outcomeLabel = 'Eliminated this round.';
+      outcomeState = 'eliminated';
+    } else if (lifeLostMe) {
+      outcomeLabel = 'Life lost. You are still in.';
+      outcomeState = 'life-lost';
+    } else if (hasIncidentData && correctIndex !== null && pickedIndex === correctIndex) {
+      outcomeLabel = 'Safe. You picked the correct answer.';
+      outcomeState = 'safe';
+    } else if (hasIncidentData && pickedIndex === null) {
+      // Timed out but not in incident lists (shouldn't occur normally)
+      outcomeLabel = 'No pick recorded.';
+      outcomeState = 'life-lost';
+    } else if (!hasIncidentData) {
+      // Reconnect path: no incident data; infer from pick vs correct
+      if (correctIndex !== null && pickedIndex === correctIndex) {
+        outcomeLabel = 'Safe. You picked the correct answer.';
+        outcomeState = 'safe';
+      } else {
+        outcomeLabel = 'See final standings for your result.';
+        outcomeState = 'life-lost';
+      }
+    } else {
+      outcomeLabel = 'Safe.';
+      outcomeState = 'safe';
+    }
+
+    const pickedIsCorrect = pickedIndex !== null && pickedIndex === correctIndex;
+    const pickedWrong = pickedIndex !== null && pickedIndex !== correctIndex;
+
+    elements.optionsContainer.innerHTML = `
+      <div class="reveal-card" role="status" aria-live="polite" aria-label="Round result: ${outcomeLabel}">
+        <div class="reveal-row">
+          <span class="reveal-row-label">Your pick</span>
+          <span class="reveal-row-value ${pickedIsCorrect ? 'correct' : (pickedWrong ? 'wrong' : '')}">${myPickText}</span>
+        </div>
+        <div class="reveal-row">
+          <span class="reveal-row-label">Correct answer</span>
+          <span class="reveal-row-value correct">${correctText}</span>
+        </div>
+        <div class="reveal-outcome reveal-outcome-${outcomeState}">${outcomeLabel}</div>
+      </div>
+    `;
+  }
+
+  // Single entry point for reveal phase across all event sources
+  function handleReveal(data) {
+    stopRoundTimer();
+    setCurrentPhase('reveal');
+    resetPickStatus();
+
+    if (isEliminated) {
+      // Eliminated players just see their elimination screen; don't overwrite it
+      return;
+    }
+
+    if (data && data.question) {
+      renderRevealCard(data);
+    } else {
+      setPickStatus(REVEAL_WAIT_COPY, true, 'reveal');
+    }
+
+    showPhase('round');
+  }
+
+  function updateLobbyReadyUI() {
+    if (elements.lobbyReadyButton) {
+      elements.lobbyReadyButton.classList.toggle('hidden', isReady);
+    }
+    if (elements.lobbyReadyConfirm) {
+      elements.lobbyReadyConfirm.classList.toggle('hidden', !isReady);
+
+      if (isReady) {
+        replayMotionClass(elements.lobbyReadyConfirm, 'status-enter');
+      }
+    }
+
+    updateLobbySummary({
+      totalPlayers: elements.lobbyJoinedCount ? Number(elements.lobbyJoinedCount.textContent) || 0 : 0,
+      readyCount: elements.lobbyReadyCount ? Number(elements.lobbyReadyCount.textContent) || 0 : 0,
+    });
+  }
+
+  function clearReadyIntent() {
+    isReady = false;
+    sessionStorage.removeItem(READY_SESSION_KEY);
+    sessionStorage.removeItem(LEGACY_READY_FLAG_KEY);
+    updateLobbyReadyUI();
+  }
+
+  function sendReady() {
+    if (isReady || currentPhase !== 'lobby') {
+      return;
+    }
+
+    isReady = true;
+
+    if (currentLobbySessionId) {
+      sessionStorage.setItem(READY_SESSION_KEY, currentLobbySessionId);
+      sessionStorage.removeItem(LEGACY_READY_FLAG_KEY);
+    } else {
+      sessionStorage.setItem(LEGACY_READY_FLAG_KEY, 'true');
+    }
+
+    socket.emit('player:ready', {});
+    updateLobbyReadyUI();
+  }
+
+  function syncLobbyReadyState(lobbyData) {
+    if (!lobbyData || lobbyData.phase !== 'lobby') {
+      return;
+    }
+
+    currentLobbySessionId = lobbyData.lobbySessionId || null;
+
+    const me = Array.isArray(lobbyData.players)
+      ? lobbyData.players.find((player) => player.id === myPlayerId)
+      : null;
+
+    if (me && me.ready) {
+      isReady = true;
+      if (currentLobbySessionId) {
+        sessionStorage.setItem(READY_SESSION_KEY, currentLobbySessionId);
+        sessionStorage.removeItem(LEGACY_READY_FLAG_KEY);
+      }
+      updateLobbyReadyUI();
+      return;
+    }
+
+    const storedSessionId = sessionStorage.getItem(READY_SESSION_KEY);
+    const hasLegacyReady = sessionStorage.getItem(LEGACY_READY_FLAG_KEY) === 'true';
+
+    if (currentLobbySessionId && storedSessionId && storedSessionId !== currentLobbySessionId) {
+      clearReadyIntent();
+      return;
+    }
+
+    const shouldRestoreReady = (
+      (currentLobbySessionId && storedSessionId === currentLobbySessionId) ||
+      (!currentLobbySessionId && hasLegacyReady)
+    );
+
+    if (!isReady && shouldRestoreReady) {
+      sendReady();
+      return;
+    }
+
+    if (!shouldRestoreReady) {
+      isReady = false;
+      updateLobbyReadyUI();
+      return;
+    }
+
+    updateLobbyReadyUI();
   }
 
   function renderResults(resultsData) {
@@ -425,7 +783,8 @@
     // Re-join with saved nickname (in case of page refresh or disconnect)
     const savedNickname = window.localStorage.getItem('nickname') || 'Player';
     socket.emit('player:join', { name: savedNickname });
-    socket.emit('player:ready', {});
+    // player:ready is no longer auto-emitted here; explicit Ready button or
+    // sessionStorage restore via lobby:update handles it.
   });
 
   socket.on('disconnect', () => {
@@ -440,9 +799,7 @@
   socket.on('lobby:update', (data) => {
     if (!data) return;
 
-    if (elements.lobbyPlayerCount) {
-      elements.lobbyPlayerCount.textContent = `${data.totalPlayers || 0} player(s) joined`;
-    }
+    updateLobbySummary(data);
 
     // Handle restart: if we're in results and receive lobby update, reset to lobby
     if (data.phase === 'lobby') {
@@ -450,6 +807,7 @@
         setCurrentPhase('lobby');
         isEliminated = false;
         hasPicked = false;
+        myPickedOption = null;
         currentRoundNumber = 0;
         currentQuestion = null;
         myLives = 3;
@@ -466,6 +824,7 @@
         setCurrentPhase('lobby');
       }
       showPhase('lobby');
+      syncLobbyReadyState(data);
     }
   });
 
@@ -478,11 +837,19 @@
       setCurrentPhase('lobby');
       isEliminated = false;
       hasPicked = false;
+      myPickedOption = null;
       currentRoundNumber = 0;
       currentQuestion = null;
       resetPickStatus();
       showPhase('lobby');
+
+      if (data.lobby) {
+        updateLobbySummary(data.lobby);
+      }
+
+      syncLobbyReadyState(data.lobby || { phase: 'lobby', lobbySessionId: currentLobbySessionId });
     } else if (phase === 'countdown') {
+      clearReadyIntent();
       setCurrentPhase('countdown');
       stopRoundTimer();
       resetPickStatus();
@@ -499,8 +866,9 @@
       if (data.round) {
         currentRoundNumber = data.round.roundNumber || 0;
         currentQuestion = data.round.question;
-        currentSlotsLeft = data.round.slotsLeft || [0, 0, 0, 0];
+        currentSlotsLeft = normalizeSlots(data.round.slotsLeft, currentQuestion);
         hasPicked = false;
+        myPickedOption = null;
 
         if (elements.roundNumber) {
           elements.roundNumber.textContent = `Round ${currentRoundNumber}`;
@@ -519,13 +887,7 @@
         showPhase('round');
       }
     } else if (phase === 'reveal') {
-      stopRoundTimer();
-      if (!isEliminated) {
-        setCurrentPhase('reveal');
-        setPickStatus(REVEAL_WAIT_COPY, true, 'reveal');
-        renderOptions();
-        showPhase('round');
-      }
+      handleReveal(data.round || null);
     } else if (phase === 'finished') {
       stopRoundTimer();
       setCurrentPhase('results');
@@ -543,8 +905,9 @@
     setCurrentPhase('round');
     currentRoundNumber = data.roundNumber || 0;
     currentQuestion = data.question;
-    currentSlotsLeft = data.slotsLeft || [0, 0, 0, 0];
+    currentSlotsLeft = normalizeSlots(data.slotsLeft, currentQuestion);
     hasPicked = false;
+    myPickedOption = null;
 
     if (elements.roundNumber) {
       elements.roundNumber.textContent = `Round ${currentRoundNumber}`;
@@ -563,10 +926,8 @@
 
     if (data.type === 'slots' && !isEliminated) {
       updateSlots(data.slotsLeft);
-    } else if (data.type === 'elimination') {
-      if (data.playerId === myPlayerId) {
-        handleElimination(data.reason);
-      }
+    } else if (data.type === 'reveal') {
+      handleReveal(data);
     }
   });
 
@@ -615,6 +976,7 @@
   socket.on('game:countdownStarted', (data) => {
     if (!data || isEliminated) return;
 
+    clearReadyIntent();
     setCurrentPhase('countdown');
     stopRoundTimer();
     resetPickStatus();
@@ -645,8 +1007,9 @@
     setCurrentPhase('round');
     currentRoundNumber = data.roundNumber || 0;
     currentQuestion = data.question;
-    currentSlotsLeft = data.slotsLeft || [0, 0, 0, 0];
+    currentSlotsLeft = normalizeSlots(data.slotsLeft, currentQuestion);
     hasPicked = false;
+    myPickedOption = null;
 
     // Show lives display
     updateLivesDisplay(myLives);
@@ -693,15 +1056,11 @@
     handleElimination(data.reason);
   });
 
-  // Handle round reveal
+  // Handle round reveal (server emits this as round:update type='reveal';
+  // this listener is a safety net for any direct game:roundReveal emissions)
   socket.on('game:roundReveal', (data) => {
-    if (!data || isEliminated) return;
-
-    stopRoundTimer();
-    setCurrentPhase('reveal');
-    setPickStatus(REVEAL_WAIT_COPY, true, 'reveal');
-    renderOptions();
-    showPhase('round');
+    if (!data) return;
+    handleReveal(data);
   });
 
   // Handle game finished
@@ -720,17 +1079,28 @@
     }
   });
 
-  // Keyboard shortcuts for options (A, B, C, D)
+  // Keyboard shortcuts for binary options (T/F)
+  // Ready button in lobby
+  if (elements.lobbyReadyButton) {
+    elements.lobbyReadyButton.addEventListener('click', () => {
+      sendReady();
+    });
+  }
+
+  // Keyboard shortcuts derived from current option labels + numeric fallback
   document.addEventListener('keydown', (event) => {
     if (currentPhase !== 'round' || hasPicked || isEliminated) {
       return;
     }
 
     const key = event.key.toLowerCase();
-    const optionMap = { a: 0, b: 1, c: 2, d: 3 };
+    const optionMap = buildKeyboardOptionMap(currentQuestion);
 
-    if (key in optionMap) {
+    if (Object.prototype.hasOwnProperty.call(optionMap, key)) {
       const optionIndex = optionMap[key];
+      if (optionIndex >= getOptionCount(currentQuestion)) {
+        return;
+      }
       const slotsLeft = currentSlotsLeft[optionIndex] || 0;
 
       // Only allow picking if option is available
@@ -743,7 +1113,9 @@
 
   // Initialize connection status
   updateConnectionStatus('connecting');
+  updateLobbyReadyUI();
   setCurrentPhase('lobby');
   showPhase('lobby');
   resetPickStatus();
+  updateLobbySummary({ totalPlayers: 0, readyCount: 0 });
 })();

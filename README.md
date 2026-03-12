@@ -35,13 +35,14 @@ The server will:
 - If port `3000` is occupied and `PORT` is unset, automatically select a free fallback port
 - If `PORT` is explicitly set to an occupied port, exit with concise remediation text
 - Display the join URL in the console
+- Generate the host QR code locally, so the join screen still works without internet access
 
 ## 🌐 URLs
 
 Once the server is running:
 
 - **Host Dashboard**: `http://localhost:3000/host`
-   Open this on the laptop to control the game, display the join QR code, and watch live progress.
+   Open this on the laptop to control the game, copy the join URL, display the join QR code, and watch live progress.
    If fallback is used, replace `3000` with the port printed at startup.
 
 - **Student Join Page**: `http://<YOUR_LAN_IP>:3000/`
@@ -49,6 +50,9 @@ Once the server is running:
    Example: `http://192.168.137.1:3000/` (or fallback port shown in logs)
 
 After joining, students are automatically redirected to the gameplay page.
+
+- **Health Snapshot**: `http://localhost:3000/health`
+   Returns a small JSON snapshot with uptime, current phase, label set, join URL, and current player counts. Useful for smoke checks or quick diagnostics.
 
 ## Network Setup
 
@@ -176,16 +180,33 @@ Windows Command Prompt:
 set PORT=3001 && npm start
 ```
 
+Optional binary label-set override:
+
+```bash
+GAME_LABEL_SET=yes_no npm start
+```
+
+Windows Command Prompt:
+
+```cmd
+set GAME_LABEL_SET=yes_no && npm start
+```
+
+Supported values:
+- `true_false` (default)
+- `yes_no`
+- `agree_disagree`
+
 ## 🎮 Game Flow
 
 1. **Teacher** opens `/host` on laptop
 2. **Students** scan QR code or visit join URL
 3. **Students** enter nickname and click "Join"
 4. **Teacher** waits for students to click "Ready"
-5. **Teacher** clicks "Start Game" when ready
+5. **Teacher** clicks "Start Game" after at least one student is ready
 6. **Game starts** with 3-second countdown
 7. **Each round:**
-   - Students see question + 4 options (A/B/C/D)
+   - Students see a true/false statement + 2 options (True/False)
    - Limited slots shown under each option
    - Students pick quickly before slots fill
    - Wrong picks, timeouts, or full slots = elimination
@@ -218,6 +239,11 @@ Smoke summary: 3/3 passed
 ```
 
 The suite validates occupied-default-port startup fallback, core game flow through finished-phase payload integrity checks, and browser-runtime host/student phase transitions with blocking console/runtime error detection.
+
+The browser-runtime smoke also verifies binary label parity in one command path:
+- Default `true_false` labels render `T/F` option badges and accept `t/f` keyboard shortcuts.
+- Opt-in `yes_no` labels render `Y/N` option badges and accept `y/n` keyboard shortcuts.
+- Numeric fallback shortcuts `1/2` remain available for derived-label safety.
 
 **Common failure hints:**
 - `EADDRINUSE` — another process is holding the chosen port; retry or kill the conflicting process.

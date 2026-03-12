@@ -19,6 +19,24 @@ const log = (socketId, action, details) => {
   console.log(`[SOCKET ${shortId}] ${action}${msg}`);
 };
 
+function toClientErrorReason(reason) {
+  const reasonMap = {
+    invalid_arguments: 'That request was incomplete. Try again.',
+    game_already_started: 'Game has already started. New players can only join after the round ends.',
+    game_in_progress: 'Game is already in progress.',
+    no_players: 'Add at least one student before starting.',
+    no_ready_players: 'Ask at least one student to tap Ready before starting.',
+    player_not_found: 'Player session was not found. Rejoin from the main page.',
+    not_in_lobby: 'Ready check-in is only available in the lobby.',
+    invalid_option: 'That answer option is not available.',
+    phase_closed: 'That phase has already ended.',
+    not_alive: 'Eliminated players cannot make picks.',
+    already_picked: 'Answer already locked for this round.'
+  };
+
+  return reasonMap[reason] || 'Something went wrong. Please try again.';
+}
+
 /**
  * Create socket event handlers
  * @param {object} io - Socket.IO server instance
@@ -60,7 +78,7 @@ function createSocketHandlers(io, gameState, applyEngineEvents, buildGameStatePa
         log(socket.id, 'join FAILED', result.reason);
         socket.emit('player:result', {
           status: 'error',
-          reason: result.reason,
+          reason: toClientErrorReason(result.reason),
         });
         return;
       }
@@ -81,7 +99,7 @@ function createSocketHandlers(io, gameState, applyEngineEvents, buildGameStatePa
         log(socket.id, 'ready FAILED', result.reason);
         socket.emit('player:result', {
           status: 'error',
-          reason: result.reason,
+          reason: toClientErrorReason(result.reason),
         });
         return;
       }
@@ -101,7 +119,7 @@ function createSocketHandlers(io, gameState, applyEngineEvents, buildGameStatePa
         log(socket.id, 'pick FAILED', result.reason);
         socket.emit('player:result', {
           status: 'error',
-          reason: result.reason,
+          reason: toClientErrorReason(result.reason),
         });
         return;
       }
@@ -121,7 +139,7 @@ function createSocketHandlers(io, gameState, applyEngineEvents, buildGameStatePa
         log(socket.id, 'start FAILED', result.reason);
         socket.emit('player:result', {
           status: 'error',
-          reason: result.reason,
+          reason: toClientErrorReason(result.reason),
         });
         return;
       }
