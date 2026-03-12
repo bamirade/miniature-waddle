@@ -342,6 +342,76 @@
     }
 
     .error-msg { color: #f44336; margin-top: 12px; }
+
+    /* Host controls */
+    .host-controls {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      margin: 16px 0;
+      flex-wrap: wrap;
+    }
+    .btn-ctrl {
+      padding: 10px 22px;
+      font-size: 0.95rem;
+      font-weight: 700;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: transform 0.1s, background 0.2s;
+    }
+    .btn-ctrl:active { transform: scale(0.95); }
+    .btn-pause { background: #ff9800; color: #fff; }
+    .btn-pause:hover { background: #f57c00; }
+    .btn-skip { background: #9c27b0; color: #fff; }
+    .btn-skip:hover { background: #7b1fa2; }
+    .btn-teams { background: #2196f3; color: #fff; margin-top: 12px; }
+    .btn-teams:hover { background: #1976d2; }
+    .btn-teams.active { background: #4caf50; }
+    .btn-kick {
+      background: #f44336;
+      color: #fff;
+      font-size: 0.7rem;
+      padding: 2px 8px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      margin-left: 6px;
+      vertical-align: middle;
+    }
+    .btn-kick:hover { background: #d32f2f; }
+
+    /* Team score panel */
+    .team-scores {
+      display: flex;
+      gap: 20px;
+      justify-content: center;
+      margin: 16px 0;
+    }
+    .team-scores.hidden { display: none !important; }
+    .team-score-card {
+      padding: 14px 28px;
+      border-radius: 12px;
+      font-weight: 700;
+      font-size: 1.1rem;
+      min-width: 160px;
+    }
+    .team-score-card.Red { background: rgba(244,67,54,0.2); border: 2px solid #f44336; color: #f44336; }
+    .team-score-card.Blue { background: rgba(33,150,243,0.2); border: 2px solid #2196f3; color: #2196f3; }
+
+    /* Paused overlay */
+    .host-paused {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.65);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 300;
+    }
+    .host-paused.hidden { display: none !important; }
+    .host-paused-text { font-size: 3rem; font-weight: 800; color: #ff9800; animation: hostPulse 1.5s infinite; }
+
+    /* Player chip with team color */
+    .player-chip.team-Red { border-color: #f44336; }
+    .player-chip.team-Blue { border-color: #2196f3; }
   </style>
 </head>
 <body>
@@ -355,7 +425,8 @@
       <p class="subtitle">Host Dashboard</p>
       <div class="player-count-label"><span id="playerCount">0</span> Players Joined</div>
       <div class="player-grid" id="playerGrid"></div>
-      <button class="btn btn-start" id="startBtn">Start Game</button>
+      <button class="btn btn-teams" id="toggleTeamsBtn">🏁 Enable Teams</button>
+      <div style="margin-top:16px"><button class="btn btn-start" id="startBtn">Start Game</button></div>
       <p id="hostError" class="error-msg hidden"></p>
     </div>
 
@@ -367,6 +438,10 @@
       <div class="timer-bar"><div class="timer-bar-inner" id="timerBar"></div></div>
       <p class="answer-progress" id="answerProgress"></p>
       <div class="alive-count" id="aliveCount"></div>
+      <div class="host-controls">
+        <button class="btn-ctrl btn-pause" id="pauseBtn">⏸ Pause</button>
+        <button class="btn-ctrl btn-skip" id="skipBtn">⏭ Skip</button>
+      </div>
     </div>
 
     <!-- Reveal -->
@@ -374,6 +449,7 @@
       <h2>Answer Revealed</h2>
       <p class="correct-answer">✓ <span id="correctAnswer"></span></p>
       <div id="fastestBadge" class="fastest-badge hidden"></div>
+      <div id="revealTeamScores" class="team-scores hidden"></div>
       <div class="scoreboard" id="scoreboard"></div>
     </div>
 
@@ -381,6 +457,7 @@
     <div id="intermission-screen" class="panel hidden">
       <h1>⏸️ Halftime</h1>
       <p class="subtitle" id="hostIntermProgress"></p>
+      <div id="intermTeamScores" class="team-scores hidden"></div>
       <div class="scoreboard" id="intermScoreboard"></div>
       <div class="intermission-badge" id="hostIntermStreak"></div>
       <p class="intermission-timer">Continuing soon...</p>
@@ -390,8 +467,17 @@
     <div id="finished-screen" class="panel hidden">
       <h1>🏆 Final Rankings</h1>
       <div class="podium" id="podium"></div>
+      <div id="finishedTeamScores" class="team-scores hidden"></div>
       <ol class="full-rankings" id="fullRankings"></ol>
       <button class="btn btn-restart" id="restartBtn">Play Again</button>
+    </div>
+
+    <!-- Paused overlay -->
+    <div id="hostPausedOverlay" class="host-paused hidden">
+      <div style="text-align:center">
+        <div class="host-paused-text">⏸️ PAUSED</div>
+        <button class="btn btn-start" id="overlayResumeBtn" style="margin-top:24px">▶ Resume</button>
+      </div>
     </div>
 
   </div>
@@ -416,6 +502,8 @@
 
     let timerInterval = null;
     let prevRanks = {}; // name -> previous rank index (0-based)
+    let teamModeOn = false;
+    let isPaused = false;
 
     ws.addEventListener('open', () => {
       ws.send(JSON.stringify({ type: 'host-join' }));
@@ -428,6 +516,26 @@
 
     document.getElementById('restartBtn').addEventListener('click', () => {
       ws.send(JSON.stringify({ type: 'restart' }));
+    });
+
+    document.getElementById('toggleTeamsBtn').addEventListener('click', () => {
+      ws.send(JSON.stringify({ type: 'toggle-teams' }));
+    });
+
+    document.getElementById('pauseBtn').addEventListener('click', () => {
+      if (isPaused) {
+        ws.send(JSON.stringify({ type: 'resume' }));
+      } else {
+        ws.send(JSON.stringify({ type: 'pause' }));
+      }
+    });
+
+    document.getElementById('overlayResumeBtn').addEventListener('click', () => {
+      ws.send(JSON.stringify({ type: 'resume' }));
+    });
+
+    document.getElementById('skipBtn').addEventListener('click', () => {
+      ws.send(JSON.stringify({ type: 'skip' }));
     });
 
     function livesStr(n) {
@@ -530,10 +638,25 @@
           grid.innerHTML = '';
           msg.players.forEach(p => {
             const chip = document.createElement('div');
-            chip.className = 'player-chip';
-            chip.textContent = (p.emoji || '') + ' ' + p.name;
+            chip.className = 'player-chip' + (p.team ? ' team-' + p.team : '');
+            const nameSpan = document.createTextNode((p.emoji || '') + ' ' + p.name + (p.team ? ' ' + (p.team === 'Red' ? '🔴' : '🔵') : ''));
+            chip.appendChild(nameSpan);
+            const kickBtn = document.createElement('button');
+            kickBtn.className = 'btn-kick';
+            kickBtn.textContent = '✕';
+            kickBtn.addEventListener('click', () => {
+              ws.send(JSON.stringify({ type: 'kick', name: p.name }));
+            });
+            chip.appendChild(kickBtn);
             grid.appendChild(chip);
           });
+          // Sync team mode button
+          if (msg.teamMode !== undefined) {
+            teamModeOn = msg.teamMode;
+            const tb = document.getElementById('toggleTeamsBtn');
+            tb.textContent = teamModeOn ? '🏁 Teams ON' : '🏁 Enable Teams';
+            tb.classList.toggle('active', teamModeOn);
+          }
           show('lobby-screen');
           break;
         }
@@ -614,6 +737,7 @@
               `<strong>${msg.aliveCount}</strong> players still alive`;
           }
           renderAnimatedScoreboard(msg.players);
+          renderTeamScores('revealTeamScores', msg.teamMode, msg.teamScores);
           break;
         }
 
@@ -639,15 +763,35 @@
           list.innerHTML = '';
           msg.rankings.forEach((r, i) => {
             const li = document.createElement('li');
-            li.innerHTML = `<span><span class="rank-pos">#${i + 1}</span>${r.emoji || ''} ${escapeHtml(r.name)}</span>
-                            <span class="sb-score">${r.score} pts ${livesStr(r.lives)}</span>`;
+            const teamIcon = r.team ? (r.team === 'Red' ? '🔴 ' : '🔵 ') : '';
+            li.innerHTML = `<span><span class=\"rank-pos\">#${i + 1}</span>${teamIcon}${r.emoji || ''} ${escapeHtml(r.name)}</span>
+                            <span class=\"sb-score\">${r.score} pts ${livesStr(r.lives)}</span>`;
             list.appendChild(li);
           });
+          renderTeamScores('finishedTeamScores', msg.teamMode, msg.teamScores);
           break;
         }
 
+        case 'paused':
+          isPaused = true;
+          clearInterval(timerInterval);
+          document.getElementById('hostPausedOverlay').classList.remove('hidden');
+          document.getElementById('pauseBtn').textContent = '▶ Resume';
+          stopAmbient();
+          break;
+
+        case 'resumed':
+          isPaused = false;
+          document.getElementById('hostPausedOverlay').classList.add('hidden');
+          document.getElementById('pauseBtn').textContent = '⏸ Pause';
+          startAmbient();
+          break;
+
         case 'restarted':
           prevRanks = {};
+          isPaused = false;
+          document.getElementById('hostPausedOverlay').classList.add('hidden');
+          document.getElementById('pauseBtn').textContent = '⏸ Pause';
           show('lobby-screen');
           break;
 
@@ -673,6 +817,7 @@
           document.getElementById('hostIntermStreak').textContent = sl
             ? `🔥 Streak Leader: ${sl.emoji || ''} ${sl.name} (${sl.streak} in a row!)`
             : '';
+          renderTeamScores('intermTeamScores', msg.teamMode, msg.teamScores);
           break;
         }
 
@@ -747,6 +892,22 @@
       prevRanks = newRanks;
     }
 
+    function renderTeamScores(containerId, teamMode, teamScores) {
+      const el = document.getElementById(containerId);
+      if (!teamMode || !teamScores || teamScores.length === 0) {
+        el.classList.add('hidden');
+        return;
+      }
+      el.classList.remove('hidden');
+      el.innerHTML = '';
+      teamScores.forEach(t => {
+        const card = document.createElement('div');
+        card.className = 'team-score-card ' + t.name;
+        card.innerHTML = `${t.icon} Team ${escapeHtml(t.name)}<br><span style="font-size:1.6rem">${t.score}</span> pts`;
+        el.appendChild(card);
+      });
+    }
+
     function createRow(p, idx, rankDelta) {
       const row = document.createElement('div');
       row.className = 'scoreboard-row' + (p.alive ? '' : ' dead');
@@ -765,8 +926,9 @@
       const streakHtml = p.streak >= 2 ? `<span class="sb-streak">🔥${p.streak}</span>` : '';
       const puHtml = p.powerUp === 'shield' ? ' 🛡️' : p.powerUp === 'double' ? ' ⚡' : '';
       const emojiHtml = p.emoji ? escapeHtml(p.emoji) + ' ' : '';
+      const teamIcon = p.team ? (p.team === 'Red' ? '🔴' : '🔵') + ' ' : '';
 
-      row.innerHTML = `<span class="sb-name">${rankNum}${changeHtml}${emojiHtml}${escapeHtml(p.name)}${puHtml}${streakHtml}</span>
+      row.innerHTML = `<span class="sb-name">${rankNum}${changeHtml}${teamIcon}${emojiHtml}${escapeHtml(p.name)}${puHtml}${streakHtml}</span>
                        <span class="sb-lives">${livesStr(p.lives)}</span>
                        <span class="sb-score">${p.score} pts</span>`;
       return row;

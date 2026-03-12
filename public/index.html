@@ -465,6 +465,42 @@
     .emoji-option.selected { border-color: #6c63ff; background: #3a3580; }
     .lobby-avatar { font-size: 3.5rem; margin-bottom: 4px; cursor: pointer; transition: transform 0.15s; }
     .lobby-avatar:hover { transform: scale(1.12); }
+
+    /* Team badge */
+    .team-badge {
+      display: inline-block;
+      padding: 4px 14px;
+      border-radius: 20px;
+      font-weight: 700;
+      font-size: 0.85rem;
+      color: #fff;
+      margin-bottom: 10px;
+    }
+    .team-badge.hidden { display: none !important; }
+    .team-badge.Red { background: #f44336; }
+    .team-badge.Blue { background: #2196f3; }
+
+    /* Paused overlay */
+    .paused-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.7);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 300;
+      animation: fadeSlideIn 0.3s ease;
+    }
+    .paused-overlay.hidden { display: none !important; }
+    .paused-text {
+      font-size: 2.5rem;
+      font-weight: 800;
+      color: #ff9800;
+      animation: pulse 1.5s infinite;
+    }
+
+    /* Kicked */
+    .kicked-text { font-size: 1.4rem; color: #f44336; font-weight: 700; margin: 20px 0; }
   </style>
 </head>
 <body>
@@ -506,6 +542,7 @@
         <span class="name" id="playerName"></span>
         <span class="score">Score: <span id="playerScore">0</span></span>
       </div>
+      <div class="team-badge hidden" id="gameTeamBadge"></div>
       <div class="lives-display" id="gameLives">❤️ ❤️ ❤️</div>
       <div class="streak-badge hidden" id="streakBadge"></div>
       <div class="power-up-active hidden" id="powerUpBadge"></div>
@@ -546,6 +583,17 @@
       <p class="subtitle">Better luck next time</p>
     </div>
 
+    <!-- Kicked -->
+    <div id="kicked" class="screen hidden">
+      <p class="kicked-text">🚫 You were removed by the host</p>
+      <p class="subtitle">Refresh to rejoin</p>
+    </div>
+
+    <!-- Paused overlay -->
+    <div id="pausedOverlay" class="paused-overlay hidden">
+      <div class="paused-text">⏸️ PAUSED</div>
+    </div>
+
     <!-- Finished -->
     <div id="finished" class="screen hidden">
       <h2>🏆 Game Over</h2>
@@ -557,7 +605,7 @@
   <script>
     const ws = new WebSocket(`ws://${location.host}`);
 
-    const screens = ['register', 'lobby', 'starting', 'game', 'reveal', 'intermission', 'eliminated', 'finished'];
+    const screens = ['register', 'lobby', 'starting', 'game', 'reveal', 'intermission', 'eliminated', 'kicked', 'finished'];
     function show(id) {
       screens.forEach(s => {
         const el = document.getElementById(s);
@@ -667,6 +715,7 @@
 
     let myName = '';
     let myEmoji = '';
+    let myTeam = null;
     let myScore = 0;
     let myLives = 3;
     let myStreak = 0;
@@ -709,7 +758,9 @@
           myName = msg.name;
           myEmoji = msg.emoji || '';
           myLives = msg.lives;
+          myTeam = msg.team || null;
           document.getElementById('lobbyAvatar').textContent = myEmoji;
+          updateTeamBadges();
           buildLobbyPicker();
           show('lobby');
           break;
@@ -727,6 +778,14 @@
 
         case 'lobby':
           document.getElementById('lobbyCount').textContent = msg.players.length;
+          // Update my team from lobby data if changed
+          if (msg.teamMode) {
+            const me = msg.players.find(p => p.name === myName);
+            if (me) myTeam = me.team;
+          } else {
+            myTeam = null;
+          }
+          updateTeamBadges();
           break;
 
         case 'game-start': {
@@ -749,6 +808,14 @@
         case 'question':
           lastChoice = null;
           document.getElementById('playerName').textContent = myEmoji + ' ' + myName;
+          // Show team badge during game
+          const gtb = document.getElementById('gameTeamBadge');
+          if (myTeam) {
+            gtb.textContent = (myTeam === 'Red' ? '🔴' : '🔵') + ' Team ' + myTeam;
+            gtb.className = 'team-badge ' + myTeam;
+          } else {
+            gtb.className = 'team-badge hidden';
+          }
           document.getElementById('playerScore').textContent = myScore;
           document.getElementById('gameLives').textContent = livesStr(myLives);
           document.getElementById('qNum').textContent = `Question ${msg.index + 1} of ${msg.total}`;
@@ -933,6 +1000,21 @@
           break;
         }
 
+        case 'paused':
+          clearInterval(studentTimerIv);
+          document.getElementById('pausedOverlay').classList.remove('hidden');
+          break;
+
+        case 'resumed':
+          document.getElementById('pausedOverlay').classList.add('hidden');
+          break;
+
+        case 'kicked':
+          stopAmbient();
+          clearInterval(studentTimerIv);
+          show('kicked');
+          break;
+
         case 'restarted':
           stopAmbient();
           myScore = 0;
@@ -942,6 +1024,7 @@
           lastChoice = null;
           clearInterval(studentTimerIv);
           document.getElementById('lobbyAvatar').textContent = myEmoji;
+          document.getElementById('pausedOverlay').classList.add('hidden');
           show('lobby');
           break;
       }
@@ -1006,6 +1089,25 @@
       '\ud83d\udc2e','\ud83d\udc28','\ud83d\udc2f','\ud83d\udc14','\ud83e\udd84','\ud83d\udc19','\ud83e\udd8b','\ud83d\udc22','\ud83e\udd89','\ud83d\udc27',
       '\ud83d\udc33','\ud83e\udd88','\ud83d\udc32','\ud83d\udc1d','\ud83d\udc1e','\ud83e\udd80','\ud83d\udc20','\ud83e\udda9','\ud83e\udd9c','\ud83d\udc3a',
     ];
+    function updateTeamBadges() {
+      // Lobby team badge: show only if there is a lobby screen visible
+      const lobbyEl = document.getElementById('lobby');
+      let lBadge = document.getElementById('lobbyTeamBadge');
+      if (!lBadge) {
+        lBadge = document.createElement('div');
+        lBadge.id = 'lobbyTeamBadge';
+        // Insert after lobbyAvatar
+        const ava = document.getElementById('lobbyAvatar');
+        ava.parentNode.insertBefore(lBadge, ava.nextSibling);
+      }
+      if (myTeam) {
+        lBadge.textContent = (myTeam === 'Red' ? '🔴' : '🔵') + ' Team ' + myTeam;
+        lBadge.className = 'team-badge ' + myTeam;
+      } else {
+        lBadge.className = 'team-badge hidden';
+      }
+    }
+
     function buildLobbyPicker() {
       const picker = document.getElementById('lobbyPicker');
       picker.innerHTML = '';

@@ -45,15 +45,23 @@ function randomEmoji() {
 
 // ── Game state ──────────────────────────────────────────────────
 const QUESTION_TIME = 15; // seconds per question
-let players = {}; // id -> { ws, name, emoji, lives, score, streak, alive, powerUp }
+let players = {}; // id -> { ws, name, emoji, lives, score, streak, alive, powerUp, team }
 let fastestThisRound = null; // { id, name, timeMs }
 let hostWs = null;
 let gameRunning = false;
+let gamePaused = false;
 let currentQuestionIdx = -1;
 let answersThisRound = new Set();
 let questionTimer = null;
 let questionStartTime = 0; // ms timestamp when question was sent
+let pausedRemaining = 0; // ms remaining when paused
 let nextPlayerId = 1;
+let teamMode = false;
+
+const TEAMS = [
+  { name: 'Red', color: '#f44336', icon: '🔴' },
+  { name: 'Blue', color: '#2196f3', icon: '🔵' },
+];
 
 function broadcast(data) {
   const msg = JSON.stringify(data);
@@ -76,8 +84,18 @@ function playerList() {
       streak: p.streak,
       alive: p.alive,
       powerUp: p.powerUp,
+      team: p.team,
     }))
     .sort((a, b) => b.score - a.score || b.lives - a.lives);
+}
+
+function teamScores() {
+  const scores = {};
+  TEAMS.forEach((t) => { scores[t.name] = 0; });
+  Object.values(players).forEach((p) => {
+    if (p.team && scores[p.team] !== undefined) scores[p.team] += p.score;
+  });
+  return TEAMS.map((t) => ({ name: t.name, color: t.color, icon: t.icon, score: scores[t.name] }));
 }
 
 // Compute rank position for each player id
@@ -101,9 +119,10 @@ function calcPoints(answerTimeMs, streak) {
 
 function sendLobbyUpdate() {
   const list = playerList();
-  if (hostWs) sendTo(hostWs, { type: "lobby", players: list });
+  const payload = { type: "lobby", players: list, teamMode };
+  if (hostWs) sendTo(hostWs, payload);
   Object.values(players).forEach((p) =>
-    sendTo(p.ws, { type: "lobby", players: list })
+    sendTo(p.ws, payload)
   );
 }
 
@@ -177,6 +196,8 @@ function revealAnswer() {
     aliveCount,
     fastest: fastestThisRound ? fastestThisRound.name : null,
     fastestEmoji: fastestThisRound ? fastestThisRound.emoji : null,
+    teamMode,
+    teamScores: teamMode ? teamScores() : null,
   });
 
   Object.entries(players).forEach(([id, p]) => {
@@ -227,21 +248,26 @@ function sendIntermission() {
     streakLeader: streakLeader
       ? { name: streakLeader.name, emoji: streakLeader.emoji, streak: streakLeader.streak }
       : null,
+    teamMode,
+    teamScores: teamMode ? teamScores() : null,
   });
   setTimeout(() => sendQuestion(), 6000);
 }
 
 function endGame() {
   gameRunning = false;
+  gamePaused = false;
   const rankings = Object.values(players)
-    .map((p) => ({ name: p.name, emoji: p.emoji, score: p.score, lives: p.lives }))
+    .map((p) => ({ name: p.name, emoji: p.emoji, score: p.score, lives: p.lives, team: p.team }))
     .sort((a, b) => b.score - a.score || b.lives - a.lives);
 
-  broadcast({ type: "finished", rankings });
+  broadcast({ type: "finished", rankings, teamMode, teamScores: teamMode ? teamScores() : null });
 }
 
 function resetGame() {
   gameRunning = false;
+  gamePaused = false;
+  pausedRemaining = 0;
   currentQuestionIdx = -1;
   answersThisRound = new Set();
   if (questionTimer) clearTimeout(questionTimer);
@@ -251,7 +277,19 @@ function resetGame() {
     p.streak = 0;
     p.alive = true;
     p.powerUp = null;
-    // keep emoji across restarts
+    // keep emoji and team across restarts
+  });
+}
+
+function assignTeams() {
+  const ids = Object.keys(players);
+  // Shuffle for fairness
+  for (let i = ids.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [ids[i], ids[j]] = [ids[j], ids[i]];
+  }
+  ids.forEach((id, i) => {
+    players[id].team = TEAMS[i % TEAMS.length].name;
   });
 }
 
@@ -273,7 +311,7 @@ wss.on("connection", (ws) => {
         isHost = true;
         hostWs = ws;
         sendTo(ws, { type: "host-ok" });
-        sendTo(ws, { type: "lobby", players: playerList() });
+        sendTo(ws, { type: "lobby", players: playerList(), teamMode });
         break;
       }
 
@@ -298,8 +336,19 @@ wss.on("connection", (ws) => {
           streak: 0,
           alive: true,
           powerUp: null,
+          team: null,
         };
-        sendTo(ws, { type: "registered", name, emoji, lives: 3 });
+        // Auto-assign team if team mode is on
+        if (teamMode) {
+          const counts = {};
+          TEAMS.forEach((t) => { counts[t.name] = 0; });
+          Object.values(players).forEach((p) => {
+            if (p.team) counts[p.team] = (counts[p.team] || 0) + 1;
+          });
+          const smallest = TEAMS.reduce((a, b) => (counts[a.name] <= counts[b.name] ? a : b));
+          players[playerId].team = smallest.name;
+        }
+        sendTo(ws, { type: "registered", name, emoji, lives: 3, team: players[playerId].team, teamMode });
         sendLobbyUpdate();
         break;
       }
@@ -311,8 +360,9 @@ wss.on("connection", (ws) => {
           return;
         }
         resetGame();
+        if (teamMode) assignTeams();
         gameRunning = true;
-        broadcast({ type: "game-start" });
+        broadcast({ type: "game-start", teamMode });
         setTimeout(() => sendQuestion(), 2000);
         break;
       }
@@ -387,6 +437,75 @@ wss.on("connection", (ws) => {
         resetGame();
         sendLobbyUpdate();
         broadcast({ type: "restarted" });
+        break;
+      }
+
+      case "toggle-teams": {
+        if (!isHost || gameRunning) return;
+        teamMode = !teamMode;
+        // Re-assign teams or clear
+        if (teamMode) {
+          assignTeams();
+        } else {
+          Object.values(players).forEach((p) => { p.team = null; });
+        }
+        sendLobbyUpdate();
+        break;
+      }
+
+      case "pause": {
+        if (!isHost || !gameRunning || gamePaused) return;
+        gamePaused = true;
+        // Capture how much time remains on the question timer
+        const elapsed = Date.now() - questionStartTime;
+        pausedRemaining = Math.max(0, QUESTION_TIME * 1000 - elapsed);
+        clearTimeout(questionTimer);
+        broadcast({ type: "paused" });
+        break;
+      }
+
+      case "resume": {
+        if (!isHost || !gameRunning || !gamePaused) return;
+        gamePaused = false;
+        questionStartTime = Date.now() - (QUESTION_TIME * 1000 - pausedRemaining);
+        questionTimer = setTimeout(() => {
+          Object.entries(players).forEach(([id, p]) => {
+            if (p.alive && !answersThisRound.has(id)) {
+              p.lives--;
+              p.streak = 0;
+              if (p.lives <= 0) p.alive = false;
+            }
+          });
+          revealAnswer();
+        }, pausedRemaining);
+        broadcast({ type: "resumed", remaining: pausedRemaining });
+        break;
+      }
+
+      case "skip": {
+        if (!isHost || !gameRunning) return;
+        gamePaused = false;
+        clearTimeout(questionTimer);
+        // No penalty for unanswered on skip
+        revealAnswer();
+        break;
+      }
+
+      case "kick": {
+        if (!isHost) return;
+        const kickName = String(msg.name || "");
+        const kickEntry = Object.entries(players).find(([, p]) => p.name === kickName);
+        if (!kickEntry) return;
+        const [kickId, kickPlayer] = kickEntry;
+        sendTo(kickPlayer.ws, { type: "kicked" });
+        try { kickPlayer.ws.close(); } catch (e) {}
+        delete players[kickId];
+        if (!gameRunning) {
+          sendLobbyUpdate();
+        } else if (hostWs) {
+          const aliveCount = Object.values(players).filter((pl) => pl.alive).length;
+          sendTo(hostWs, { type: "answer-count", answered: answersThisRound.size, total: aliveCount });
+        }
         break;
       }
 
