@@ -531,7 +531,7 @@
           msg.players.forEach(p => {
             const chip = document.createElement('div');
             chip.className = 'player-chip';
-            chip.textContent = p.name;
+            chip.textContent = (p.emoji || '') + ' ' + p.name;
             grid.appendChild(chip);
           });
           show('lobby-screen');
@@ -604,7 +604,7 @@
           // Fastest badge
           const fb = document.getElementById('fastestBadge');
           if (msg.fastest) {
-            fb.textContent = `⚡ Fastest: ${msg.fastest}`;
+            fb.textContent = `⚡ Fastest: ${msg.fastestEmoji || ''} ${msg.fastest}`;
             fb.classList.remove('hidden');
           } else {
             fb.classList.add('hidden');
@@ -630,7 +630,7 @@
             const div = document.createElement('div');
             div.className = `podium-item ${medals[i]}`;
             div.innerHTML = `<div class="podium-rank">${rankIcons[i]}</div>
-                             <div class="podium-name">${escapeHtml(r.name)}</div>
+                             <div class="podium-name">${r.emoji || ''} ${escapeHtml(r.name)}</div>
                              <div class="podium-score">${r.score} pts</div>`;
             podium.appendChild(div);
           });
@@ -639,7 +639,7 @@
           list.innerHTML = '';
           msg.rankings.forEach((r, i) => {
             const li = document.createElement('li');
-            li.innerHTML = `<span><span class="rank-pos">#${i + 1}</span>${escapeHtml(r.name)}</span>
+            li.innerHTML = `<span><span class="rank-pos">#${i + 1}</span>${r.emoji || ''} ${escapeHtml(r.name)}</span>
                             <span class="sb-score">${r.score} pts ${livesStr(r.lives)}</span>`;
             list.appendChild(li);
           });
@@ -664,14 +664,14 @@
             row.className = 'scoreboard-row' + (r.alive ? '' : ' dead');
             row.style.animation = `rowSlideIn 0.3s ease ${i * 0.06}s backwards`;
             const streakHtml = r.streak >= 2 ? `<span class="sb-streak">🔥${r.streak}</span>` : '';
-            row.innerHTML = `<span class="sb-name"><span class="sb-rank-num">#${i + 1}</span>${escapeHtml(r.name)}${streakHtml}</span>
+            row.innerHTML = `<span class="sb-name"><span class="sb-rank-num">#${i + 1}</span>${r.emoji || ''} ${escapeHtml(r.name)}${streakHtml}</span>
                              <span class="sb-lives">${livesStr(r.lives)}</span>
                              <span class="sb-score">${r.score} pts</span>`;
             intermSb.appendChild(row);
           });
           const sl = msg.streakLeader;
           document.getElementById('hostIntermStreak').textContent = sl
-            ? `🔥 Streak Leader: ${sl.name} (${sl.streak} in a row!)`
+            ? `🔥 Streak Leader: ${sl.emoji || ''} ${sl.name} (${sl.streak} in a row!)`
             : '';
           break;
         }
@@ -764,8 +764,9 @@
 
       const streakHtml = p.streak >= 2 ? `<span class="sb-streak">🔥${p.streak}</span>` : '';
       const puHtml = p.powerUp === 'shield' ? ' 🛡️' : p.powerUp === 'double' ? ' ⚡' : '';
+      const emojiHtml = p.emoji ? escapeHtml(p.emoji) + ' ' : '';
 
-      row.innerHTML = `<span class="sb-name">${rankNum}${changeHtml}${escapeHtml(p.name)}${puHtml}${streakHtml}</span>
+      row.innerHTML = `<span class="sb-name">${rankNum}${changeHtml}${emojiHtml}${escapeHtml(p.name)}${puHtml}${streakHtml}</span>
                        <span class="sb-lives">${livesStr(p.lives)}</span>
                        <span class="sb-score">${p.score} pts</span>`;
       return row;

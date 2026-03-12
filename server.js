@@ -33,9 +33,19 @@ const QUESTIONS = [
   { question: "What is the boiling point of water in Celsius?", choices: ["100°C", "90°C"], answer: "100°C" },
 ];
 
+// ── Emoji avatars ───────────────────────────────────────────────
+const AVATAR_EMOJIS = [
+  '🐶','🐱','🐼','🦊','🐸','🐵','🐷','🐰','🐻','🦁',
+  '🐮','🐨','🐯','🐔','🦄','🐙','🦋','🐢','🦉','🐧',
+  '🐳','🦈','🐲','🐝','🐞','🦀','🐠','🦩','🦜','🐺',
+];
+function randomEmoji() {
+  return AVATAR_EMOJIS[Math.floor(Math.random() * AVATAR_EMOJIS.length)];
+}
+
 // ── Game state ──────────────────────────────────────────────────
 const QUESTION_TIME = 15; // seconds per question
-let players = {}; // id -> { ws, name, lives, score, streak, alive, powerUp }
+let players = {}; // id -> { ws, name, emoji, lives, score, streak, alive, powerUp }
 let fastestThisRound = null; // { id, name, timeMs }
 let hostWs = null;
 let gameRunning = false;
@@ -60,6 +70,7 @@ function playerList() {
   return Object.values(players)
     .map((p) => ({
       name: p.name,
+      emoji: p.emoji,
       lives: p.lives,
       score: p.score,
       streak: p.streak,
@@ -165,6 +176,7 @@ function revealAnswer() {
     total: QUESTIONS.length,
     aliveCount,
     fastest: fastestThisRound ? fastestThisRound.name : null,
+    fastestEmoji: fastestThisRound ? fastestThisRound.emoji : null,
   });
 
   Object.entries(players).forEach(([id, p]) => {
@@ -213,7 +225,7 @@ function sendIntermission() {
     questionsCompleted: currentQuestionIdx + 1,
     questionsTotal: QUESTIONS.length,
     streakLeader: streakLeader
-      ? { name: streakLeader.name, streak: streakLeader.streak }
+      ? { name: streakLeader.name, emoji: streakLeader.emoji, streak: streakLeader.streak }
       : null,
   });
   setTimeout(() => sendQuestion(), 6000);
@@ -222,7 +234,7 @@ function sendIntermission() {
 function endGame() {
   gameRunning = false;
   const rankings = Object.values(players)
-    .map((p) => ({ name: p.name, score: p.score, lives: p.lives }))
+    .map((p) => ({ name: p.name, emoji: p.emoji, score: p.score, lives: p.lives }))
     .sort((a, b) => b.score - a.score || b.lives - a.lives);
 
   broadcast({ type: "finished", rankings });
@@ -239,6 +251,7 @@ function resetGame() {
     p.streak = 0;
     p.alive = true;
     p.powerUp = null;
+    // keep emoji across restarts
   });
 }
 
@@ -275,16 +288,18 @@ wss.on("connection", (ws) => {
           return;
         }
         playerId = String(nextPlayerId++);
+        const emoji = randomEmoji();
         players[playerId] = {
           ws,
           name,
+          emoji,
           lives: 3,
           score: 0,
           streak: 0,
           alive: true,
           powerUp: null,
         };
-        sendTo(ws, { type: "registered", name, lives: 3 });
+        sendTo(ws, { type: "registered", name, emoji, lives: 3 });
         sendLobbyUpdate();
         break;
       }
@@ -314,7 +329,7 @@ wss.on("connection", (ws) => {
 
         // Track fastest correct answer
         if (msg.choice === q.answer && (!fastestThisRound || answerTime < fastestThisRound.timeMs)) {
-          fastestThisRound = { id: playerId, name: p.name, timeMs: answerTime };
+          fastestThisRound = { id: playerId, name: p.name, emoji: p.emoji, timeMs: answerTime };
         }
 
         if (msg.choice === q.answer) {
@@ -375,6 +390,16 @@ wss.on("connection", (ws) => {
         break;
       }
 
+      case "update-emoji": {
+        if (!playerId || !players[playerId]) return;
+        const newEmoji = String(msg.emoji || "");
+        if (newEmoji.length === 0 || newEmoji.length > 4) return;
+        players[playerId].emoji = newEmoji;
+        sendTo(ws, { type: "emoji-updated", emoji: newEmoji });
+        if (!gameRunning) sendLobbyUpdate();
+        break;
+      }
+
       case "reaction": {
         if (!playerId || !players[playerId] || !gameRunning) return;
         const emoji = String(msg.emoji || "");
@@ -384,6 +409,7 @@ wss.on("connection", (ws) => {
             type: "reaction",
             name: players[playerId].name,
             emoji,
+            avatar: players[playerId].emoji,
           });
         break;
       }

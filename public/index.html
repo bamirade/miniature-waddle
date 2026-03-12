@@ -428,6 +428,43 @@
       margin-top: 12px;
       animation: pulse 2s infinite;
     }
+
+    /* Emoji avatar */
+    .avatar-display {
+      font-size: 3rem;
+      margin-bottom: 8px;
+      cursor: pointer;
+      transition: transform 0.15s;
+    }
+    .avatar-display:hover { transform: scale(1.15); }
+    .avatar-hint { color: #666; font-size: 0.75rem; margin-bottom: 12px; }
+    .emoji-picker {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: center;
+      margin: 12px 0;
+      max-height: 180px;
+      overflow-y: auto;
+    }
+    .emoji-picker.hidden { display: none !important; }
+    .emoji-option {
+      font-size: 1.6rem;
+      width: 42px;
+      height: 42px;
+      border: 2px solid #333;
+      border-radius: 10px;
+      background: #1a1a2e;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: border-color 0.15s, transform 0.1s;
+    }
+    .emoji-option:hover { border-color: #6c63ff; transform: scale(1.12); }
+    .emoji-option.selected { border-color: #6c63ff; background: #3a3580; }
+    .lobby-avatar { font-size: 3.5rem; margin-bottom: 4px; cursor: pointer; transition: transform 0.15s; }
+    .lobby-avatar:hover { transform: scale(1.12); }
   </style>
 </head>
 <body>
@@ -449,6 +486,8 @@
     <!-- Lobby -->
     <div id="lobby" class="screen hidden">
       <h1>You're In!</h1>
+      <div class="lobby-avatar" id="lobbyAvatar" title="Click to change"></div>
+      <div id="lobbyPicker" class="emoji-picker hidden"></div>
       <p class="waiting">Waiting for host to start…</p>
       <div class="player-count"><span id="lobbyCount">0</span> players connected</div>
       <div class="lives-label">YOUR LIVES</div>
@@ -627,6 +666,7 @@
     }
 
     let myName = '';
+    let myEmoji = '';
     let myScore = 0;
     let myLives = 3;
     let myStreak = 0;
@@ -667,8 +707,16 @@
       switch (msg.type) {
         case 'registered':
           myName = msg.name;
+          myEmoji = msg.emoji || '';
           myLives = msg.lives;
+          document.getElementById('lobbyAvatar').textContent = myEmoji;
+          buildLobbyPicker();
           show('lobby');
+          break;
+
+        case 'emoji-updated':
+          myEmoji = msg.emoji;
+          document.getElementById('lobbyAvatar').textContent = myEmoji;
           break;
 
         case 'error':
@@ -700,7 +748,7 @@
 
         case 'question':
           lastChoice = null;
-          document.getElementById('playerName').textContent = myName;
+          document.getElementById('playerName').textContent = myEmoji + ' ' + myName;
           document.getElementById('playerScore').textContent = myScore;
           document.getElementById('gameLives').textContent = livesStr(myLives);
           document.getElementById('qNum').textContent = `Question ${msg.index + 1} of ${msg.total}`;
@@ -861,7 +909,7 @@
           list.innerHTML = '';
           msg.rankings.forEach((r, i) => {
             const li = document.createElement('li');
-            li.innerHTML = `<span class="rank-name">${i + 1}. ${escapeHtml(r.name)}</span>
+            li.innerHTML = `<span class="rank-name">${i + 1}. ${r.emoji || ''} ${escapeHtml(r.name)}</span>
                             <span class="rank-score">${r.score} pts ${livesStr(r.lives)}</span>`;
             list.appendChild(li);
           });
@@ -893,6 +941,7 @@
           prevLives = 3;
           lastChoice = null;
           clearInterval(studentTimerIv);
+          document.getElementById('lobbyAvatar').textContent = myEmoji;
           show('lobby');
           break;
       }
@@ -950,6 +999,39 @@
       }
       draw();
     }
+
+    // ── Emoji avatar picker ──────────────────────────────
+    const AVATAR_EMOJIS = [
+      '\ud83d\udc36','\ud83d\udc31','\ud83d\udc3c','\ud83e\udd8a','\ud83d\udc38','\ud83d\udc35','\ud83d\udc37','\ud83d\udc30','\ud83d\udc3b','\ud83e\udd81',
+      '\ud83d\udc2e','\ud83d\udc28','\ud83d\udc2f','\ud83d\udc14','\ud83e\udd84','\ud83d\udc19','\ud83e\udd8b','\ud83d\udc22','\ud83e\udd89','\ud83d\udc27',
+      '\ud83d\udc33','\ud83e\udd88','\ud83d\udc32','\ud83d\udc1d','\ud83d\udc1e','\ud83e\udd80','\ud83d\udc20','\ud83e\udda9','\ud83e\udd9c','\ud83d\udc3a',
+    ];
+    function buildLobbyPicker() {
+      const picker = document.getElementById('lobbyPicker');
+      picker.innerHTML = '';
+      AVATAR_EMOJIS.forEach(em => {
+        const btn = document.createElement('button');
+        btn.className = 'emoji-option' + (em === myEmoji ? ' selected' : '');
+        btn.textContent = em;
+        btn.addEventListener('click', () => {
+          myEmoji = em;
+          document.getElementById('lobbyAvatar').textContent = em;
+          picker.querySelectorAll('.emoji-option').forEach(b => b.classList.remove('selected'));
+          btn.classList.add('selected');
+          ws.send(JSON.stringify({ type: 'update-emoji', emoji: em }));
+        });
+        picker.appendChild(btn);
+      });
+    }
+    document.addEventListener('click', (e) => {
+      const avatar = document.getElementById('lobbyAvatar');
+      const picker = document.getElementById('lobbyPicker');
+      if (e.target === avatar) {
+        picker.classList.toggle('hidden');
+      } else if (!picker.contains(e.target)) {
+        picker.classList.add('hidden');
+      }
+    });
 
     // ── Reaction emojis ──────────────────────────────────
     document.querySelectorAll('.reaction-btn').forEach(btn => {
