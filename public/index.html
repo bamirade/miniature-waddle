@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Quiz Game</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: #0f0f23;
+      color: #e0e0e0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .container {
+      width: 100%;
+      max-width: 420px;
+      padding: 24px;
+      text-align: center;
+    }
+    h1 { font-size: 2rem; margin-bottom: 8px; color: #fff; }
+    .subtitle { color: #888; margin-bottom: 32px; font-size: 0.95rem; }
+    .screen {
+      transition: opacity 0.35s ease, transform 0.35s ease;
+      opacity: 1;
+      transform: translateY(0);
+    }
+    .screen.hidden {
+      display: none !important;
+      opacity: 0;
+      transform: translateY(18px);
+    }
+    .screen.fade-in {
+      animation: fadeSlideIn 0.4s ease forwards;
+    }
+    @keyframes fadeSlideIn {
+      from { opacity: 0; transform: translateY(18px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Full-screen flash overlay */
+    .flash-overlay {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      opacity: 0;
+      z-index: 100;
+      transition: opacity 0.15s;
+    }
+    .flash-overlay.flash-correct { background: rgba(76, 175, 80, 0.18); opacity: 1; }
+    .flash-overlay.flash-wrong   { background: rgba(244, 67, 54, 0.18); opacity: 1; }
+    .flash-overlay.flash-timeout { background: rgba(255, 152, 0, 0.18); opacity: 1; }
+
+    /* Registration */
+    #register input {
+      width: 100%;
+      padding: 14px 18px;
+      font-size: 1.1rem;
+      border: 2px solid #333;
+      border-radius: 12px;
+      background: #1a1a2e;
+      color: #fff;
+      outline: none;
+      margin-bottom: 16px;
+      transition: border-color .2s;
+    }
+    #register input:focus { border-color: #6c63ff; }
+    .btn {
+      width: 100%;
+      padding: 14px;
+      font-size: 1.1rem;
+      font-weight: 600;
+      border: none;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: transform .1s, opacity .2s;
+    }
+    .btn:active { transform: scale(0.97); }
+    .btn-primary { background: #6c63ff; color: #fff; }
+    .btn-primary:hover { background: #5a52d5; }
+
+    /* Lobby */
+    #lobby .waiting {
+      font-size: 1.2rem;
+      margin-bottom: 16px;
+      color: #aaa;
+    }
+    .player-count {
+      display: inline-block;
+      background: #1a1a2e;
+      border: 1px solid #333;
+      border-radius: 8px;
+      padding: 8px 20px;
+      margin-bottom: 24px;
+      font-size: 1rem;
+    }
+    .lives-display {
+      font-size: 1.8rem;
+      margin: 12px 0;
+      letter-spacing: 4px;
+    }
+    .lives-label { color: #aaa; font-size: 0.85rem; margin-bottom: 8px; }
+
+    /* Question */
+    #game .question-num {
+      color: #6c63ff;
+      font-weight: 600;
+      margin-bottom: 8px;
+      font-size: 0.9rem;
+    }
+    #game .question-text {
+      font-size: 1.3rem;
+      font-weight: 600;
+      color: #fff;
+      margin-bottom: 24px;
+      line-height: 1.4;
+    }
+    .choices {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .choice-btn {
+      padding: 16px;
+      font-size: 1.1rem;
+      font-weight: 600;
+      border: 2px solid #333;
+      border-radius: 12px;
+      background: #1a1a2e;
+      color: #fff;
+      cursor: pointer;
+      transition: all .15s;
+    }
+    .choice-btn:hover { border-color: #6c63ff; background: #252547; }
+    .choice-btn.selected { border-color: #6c63ff; background: #3a3580; pointer-events: none; }
+    .choice-btn:disabled { opacity: 0.5; pointer-events: none; }
+    .choice-btn { animation: choiceAppear 0.3s ease backwards; }
+    .choice-btn:nth-child(1) { animation-delay: 0.08s; }
+    .choice-btn:nth-child(2) { animation-delay: 0.18s; }
+    @keyframes choiceAppear {
+      from { opacity: 0; transform: translateX(-16px); }
+      to   { opacity: 1; transform: translateX(0); }
+    }
+
+    /* Status bar */
+    .status-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      padding: 10px 16px;
+      background: #1a1a2e;
+      border-radius: 10px;
+    }
+    .status-bar .name { font-weight: 600; }
+    .status-bar .score { color: #6c63ff; font-weight: 600; }
+
+    /* Reveal */
+    #reveal {
+      padding: 20px;
+    }
+    .reveal-result {
+      font-size: 1.5rem;
+      font-weight: 700;
+      margin: 12px 0;
+    }
+    .reveal-result.correct { color: #4caf50; animation: bounceIn 0.5s ease; }
+    .reveal-result.wrong   { color: #f44336; animation: shakeX 0.5s ease; }
+    .reveal-result.timeout  { color: #ff9800; animation: shakeX 0.5s ease; }
+    .reveal-answer {
+      color: #aaa;
+      margin-top: 8px;
+      opacity: 0;
+      animation: fadeUp 0.4s 0.3s ease forwards;
+    }
+    @keyframes bounceIn {
+      0%   { transform: scale(0.3); opacity: 0; }
+      50%  { transform: scale(1.08); }
+      70%  { transform: scale(0.95); }
+      100% { transform: scale(1); opacity: 1; }
+    }
+    @keyframes shakeX {
+      0%, 100% { transform: translateX(0); }
+      15%  { transform: translateX(-12px); }
+      30%  { transform: translateX(10px); }
+      45%  { transform: translateX(-8px); }
+      60%  { transform: translateX(6px); }
+      75%  { transform: translateX(-3px); }
+    }
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(10px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Eliminated */
+    .eliminated-text {
+      font-size: 1.4rem;
+      color: #f44336;
+      font-weight: 700;
+      margin: 20px 0;
+      animation: bounceIn 0.6s ease;
+    }
+    .eliminated .subtitle {
+      opacity: 0;
+      animation: fadeUp 0.4s 0.4s ease forwards;
+    }
+
+    /* Life-lost heart animation */
+    .lives-display .heart {
+      display: inline-block;
+      transition: transform 0.3s, opacity 0.3s;
+    }
+    .lives-display .heart.lost {
+      animation: heartBreak 0.6s ease forwards;
+    }
+    @keyframes heartBreak {
+      0%   { transform: scale(1); opacity: 1; filter: none; }
+      30%  { transform: scale(1.4); opacity: 1; filter: brightness(1.5); }
+      60%  { transform: scale(0.8) rotate(-10deg); opacity: 0.6; }
+      100% { transform: scale(1) rotate(0deg); opacity: 1; filter: grayscale(1); }
+    }
+
+    /* Score pop */
+    .score-pop {
+      animation: popUp 0.4s ease;
+    }
+    @keyframes popUp {
+      0%   { transform: scale(1); }
+      40%  { transform: scale(1.35); color: #4caf50; }
+      100% { transform: scale(1); }
+    }
+
+    /* Finished */
+    #finished h2 { color: #fff; margin-bottom: 20px; }
+    .rank-list {
+      list-style: none;
+      text-align: left;
+    }
+    .rank-list li {
+      display: flex;
+      justify-content: space-between;
+      padding: 12px 16px;
+      border-radius: 10px;
+      margin-bottom: 8px;
+      background: #1a1a2e;
+    }
+    .rank-list li:first-child { background: #2a2755; border: 1px solid #6c63ff; }
+    .rank-list .rank-name { font-weight: 600; }
+    .rank-list .rank-score { color: #6c63ff; font-weight: 600; }
+
+    .error-msg { color: #f44336; margin-top: 12px; font-size: 0.9rem; }
+
+    /* countdown overlay */
+    .countdown {
+      font-size: 4rem;
+      font-weight: 800;
+      color: #6c63ff;
+      animation: pulse 1s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.15); opacity: 0.7; }
+    }
+
+    /* Rank list entrance */
+    .rank-list li {
+      opacity: 0;
+      animation: fadeSlideIn 0.35s ease forwards;
+    }
+    .rank-list li:nth-child(1) { animation-delay: 0.1s; }
+    .rank-list li:nth-child(2) { animation-delay: 0.2s; }
+    .rank-list li:nth-child(3) { animation-delay: 0.3s; }
+    .rank-list li:nth-child(4) { animation-delay: 0.4s; }
+    .rank-list li:nth-child(5) { animation-delay: 0.5s; }
+    .rank-list li:nth-child(n+6) { animation-delay: 0.6s; }
+  </style>
+</head>
+<body>
+  <div class="container">
+
+    <!-- Flash overlay for correct/wrong feedback -->
+    <div class="flash-overlay" id="flashOverlay"></div>
+
+    <!-- Register screen -->
+    <div id="register" class="screen">
+      <h1>Quiz Game</h1>
+      <p class="subtitle">Enter your name to join</p>
+      <input id="nameInput" type="text" placeholder="Your name" maxlength="30" autocomplete="off" />
+      <button class="btn btn-primary" id="joinBtn">Join Game</button>
+      <p id="regError" class="error-msg hidden"></p>
+    </div>
+
+    <!-- Lobby -->
+    <div id="lobby" class="screen hidden">
+      <h1>You're In!</h1>
+      <p class="waiting">Waiting for host to start…</p>
+      <div class="player-count"><span id="lobbyCount">0</span> players connected</div>
+      <div class="lives-label">YOUR LIVES</div>
+      <div class="lives-display" id="lobbyLives">❤️ ❤️ ❤️</div>
+    </div>
+
+    <!-- Game starting countdown -->
+    <div id="starting" class="screen hidden">
+      <p class="subtitle">Get ready!</p>
+      <div class="countdown" id="countdownNum">3</div>
+    </div>
+
+    <!-- Question -->
+    <div id="game" class="screen hidden">
+      <div class="status-bar">
+        <span class="name" id="playerName"></span>
+        <span class="score">Score: <span id="playerScore">0</span></span>
+      </div>
+      <div class="lives-display" id="gameLives">❤️ ❤️ ❤️</div>
+      <p class="question-num" id="qNum"></p>
+      <p class="question-text" id="qText"></p>
+      <div class="choices" id="choices"></div>
+    </div>
+
+    <!-- Reveal -->
+    <div id="reveal" class="screen hidden">
+      <p id="revealResult" class="reveal-result"></p>
+      <p class="reveal-answer">Correct answer: <strong id="revealAnswer"></strong></p>
+      <div class="lives-display" id="revealLives"></div>
+    </div>
+
+    <!-- Eliminated -->
+    <div id="eliminated" class="screen hidden">
+      <p class="eliminated-text">💀 You've been eliminated!</p>
+      <p class="subtitle">Better luck next time</p>
+    </div>
+
+    <!-- Finished -->
+    <div id="finished" class="screen hidden">
+      <h2>🏆 Game Over</h2>
+      <ol class="rank-list" id="rankList"></ol>
+    </div>
+
+  </div>
+
+  <script>
+    const ws = new WebSocket(`ws://${location.host}`);
+
+    const screens = ['register', 'lobby', 'starting', 'game', 'reveal', 'eliminated', 'finished'];
+    function show(id) {
+      screens.forEach(s => {
+        const el = document.getElementById(s);
+        if (s === id) {
+          el.classList.remove('hidden');
+          el.classList.remove('fade-in');
+          void el.offsetWidth; // reflow to restart animation
+          el.classList.add('fade-in');
+        } else {
+          el.classList.add('hidden');
+          el.classList.remove('fade-in');
+        }
+      });
+    }
+
+    function flash(type) {
+      const overlay = document.getElementById('flashOverlay');
+      overlay.className = 'flash-overlay flash-' + type;
+      setTimeout(() => { overlay.className = 'flash-overlay'; }, 500);
+    }
+
+    let myName = '';
+    let myScore = 0;
+    let myLives = 3;
+    let lastChoice = null;
+
+    let prevLives = 3;
+
+    function livesHtml(n, animate) {
+      let html = '';
+      for (let i = 0; i < 3; i++) {
+        const alive = i < n;
+        const justLost = animate && i >= n && i < prevLives;
+        html += `<span class="heart${justLost ? ' lost' : ''}">${alive ? '❤️' : '🖤'}</span> `;
+      }
+      return html;
+    }
+
+    function livesStr(n) {
+      return Array(Math.max(0, n)).fill('❤️').join(' ') +
+             (n < 3 ? ' ' + Array(3 - Math.max(0, n)).fill('🖤').join(' ') : '');
+    }
+
+    document.getElementById('joinBtn').addEventListener('click', () => {
+      const name = document.getElementById('nameInput').value.trim();
+      if (!name) return;
+      ws.send(JSON.stringify({ type: 'register', name }));
+    });
+
+    document.getElementById('nameInput').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') document.getElementById('joinBtn').click();
+    });
+
+    ws.addEventListener('message', (e) => {
+      const msg = JSON.parse(e.data);
+
+      switch (msg.type) {
+        case 'registered':
+          myName = msg.name;
+          myLives = msg.lives;
+          show('lobby');
+          break;
+
+        case 'error':
+          const err = document.getElementById('regError');
+          err.textContent = msg.message;
+          err.classList.remove('hidden');
+          break;
+
+        case 'lobby':
+          document.getElementById('lobbyCount').textContent = msg.players.length;
+          break;
+
+        case 'game-start': {
+          show('starting');
+          let count = 3;
+          document.getElementById('countdownNum').textContent = count;
+          const iv = setInterval(() => {
+            count--;
+            if (count <= 0) {
+              clearInterval(iv);
+            } else {
+              document.getElementById('countdownNum').textContent = count;
+            }
+          }, 700);
+          break;
+        }
+
+        case 'question':
+          lastChoice = null;
+          document.getElementById('playerName').textContent = myName;
+          document.getElementById('playerScore').textContent = myScore;
+          document.getElementById('gameLives').textContent = livesStr(myLives);
+          document.getElementById('qNum').textContent = `Question ${msg.index + 1} of ${msg.total}`;
+          document.getElementById('qText').textContent = msg.question;
+
+          const choicesDiv = document.getElementById('choices');
+          choicesDiv.innerHTML = '';
+          // Shuffle the two choices
+          const shuffled = [...msg.choices].sort(() => Math.random() - 0.5);
+          shuffled.forEach(c => {
+            const btn = document.createElement('button');
+            btn.className = 'choice-btn';
+            btn.textContent = c;
+            btn.addEventListener('click', () => {
+              lastChoice = c;
+              document.querySelectorAll('.choice-btn').forEach(b => {
+                b.classList.remove('selected');
+                b.disabled = true;
+              });
+              btn.classList.add('selected');
+              ws.send(JSON.stringify({ type: 'answer', choice: c }));
+            });
+            choicesDiv.appendChild(btn);
+          });
+          show('game');
+          break;
+
+        case 'reveal': {
+          const oldLives = myLives;
+          myLives = msg.lives;
+          myScore = msg.score;
+          const isCorrect = lastChoice === msg.answer;
+          const resultEl = document.getElementById('revealResult');
+
+          // Flash the screen
+          if (!lastChoice) {
+            flash('timeout');
+          } else if (isCorrect) {
+            flash('correct');
+          } else {
+            flash('wrong');
+          }
+
+          resultEl.textContent = lastChoice ? (isCorrect ? '✓ Correct!' : '✗ Wrong!') : '⏱ Time\u0027s up!';
+          resultEl.className = 'reveal-result ' + (lastChoice ? (isCorrect ? 'correct' : 'wrong') : 'timeout');
+          document.getElementById('revealAnswer').textContent = msg.answer;
+
+          // Animate lives with heart-break if lost
+          prevLives = oldLives;
+          document.getElementById('revealLives').innerHTML = livesHtml(myLives, oldLives > myLives);
+
+          // Animate score pop if gained
+          if (isCorrect) {
+            const scoreEl = document.getElementById('playerScore');
+            scoreEl.textContent = myScore;
+            scoreEl.classList.remove('score-pop');
+            void scoreEl.offsetWidth;
+            scoreEl.classList.add('score-pop');
+          }
+
+          if (!msg.alive) {
+            show('eliminated');
+          } else {
+            show('reveal');
+          }
+          break;
+        }
+
+        case 'finished': {
+          const list = document.getElementById('rankList');
+          list.innerHTML = '';
+          msg.rankings.forEach((r, i) => {
+            const li = document.createElement('li');
+            li.innerHTML = `<span class="rank-name">${i + 1}. ${escapeHtml(r.name)}</span>
+                            <span class="rank-score">${r.score} pts ${livesStr(r.lives)}</span>`;
+            list.appendChild(li);
+          });
+          show('finished');
+          break;
+        }
+
+        case 'restarted':
+          myScore = 0;
+          myLives = 3;
+          lastChoice = null;
+          show('lobby');
+          break;
+      }
+    });
+
+    function escapeHtml(str) {
+      const d = document.createElement('div');
+      d.textContent = str;
+      return d.innerHTML;
+    }
+  </script>
+</body>
+</html>

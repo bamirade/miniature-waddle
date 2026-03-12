@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Host — Quiz Game</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: #0f0f23;
+      color: #e0e0e0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .container {
+      width: 100%;
+      max-width: 800px;
+      padding: 32px;
+      text-align: center;
+    }
+    h1 { font-size: 2.4rem; color: #fff; margin-bottom: 8px; }
+    h2 { font-size: 1.6rem; color: #fff; margin-bottom: 16px; }
+    .subtitle { color: #888; margin-bottom: 24px; font-size: 1rem; }
+    .hidden { display: none !important; }
+
+    /* Screen transitions */
+    .panel {
+      animation: hostFadeIn 0.4s ease;
+    }
+    @keyframes hostFadeIn {
+      from { opacity: 0; transform: translateY(16px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .btn {
+      padding: 16px 40px;
+      font-size: 1.2rem;
+      font-weight: 700;
+      border: none;
+      border-radius: 14px;
+      cursor: pointer;
+      transition: transform .1s, background .2s;
+    }
+    .btn:active { transform: scale(0.97); }
+    .btn-start { background: #4caf50; color: #fff; font-size: 1.4rem; padding: 18px 60px; }
+    .btn-start:hover { background: #43a047; }
+    .btn-restart { background: #6c63ff; color: #fff; margin-top: 24px; }
+    .btn-restart:hover { background: #5a52d5; }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* Lobby */
+    .player-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      justify-content: center;
+      margin: 24px 0;
+    }
+    .player-chip {
+      background: #1a1a2e;
+      border: 1px solid #333;
+      border-radius: 10px;
+      padding: 10px 18px;
+      font-size: 1rem;
+      font-weight: 500;
+    }
+    .player-count-label {
+      color: #6c63ff;
+      font-size: 1.2rem;
+      font-weight: 600;
+      margin-bottom: 12px;
+    }
+
+    /* Question display */
+    #question-screen .q-number {
+      color: #6c63ff;
+      font-weight: 700;
+      font-size: 1rem;
+      margin-bottom: 12px;
+    }
+    #question-screen .q-text {
+      font-size: 2rem;
+      font-weight: 700;
+      color: #fff;
+      line-height: 1.4;
+      margin-bottom: 28px;
+      animation: textReveal 0.45s ease;
+    }
+    @keyframes textReveal {
+      from { opacity: 0; transform: scale(0.92); filter: blur(4px); }
+      to   { opacity: 1; transform: scale(1); filter: blur(0); }
+    }
+    .host-choices {
+      display: flex;
+      gap: 16px;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin-bottom: 20px;
+    }
+    .host-choice {
+      padding: 16px 32px;
+      font-size: 1.2rem;
+      font-weight: 600;
+      background: #1a1a2e;
+      border: 2px solid #333;
+      border-radius: 12px;
+      min-width: 200px;
+      animation: choiceSlide 0.35s ease backwards;
+    }
+    .host-choice:nth-child(1) { animation-delay: 0.1s; }
+    .host-choice:nth-child(2) { animation-delay: 0.2s; }
+    @keyframes choiceSlide {
+      from { opacity: 0; transform: translateY(12px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .answer-progress {
+      color: #aaa;
+      font-size: 1rem;
+      margin-top: 16px;
+    }
+    .timer-bar {
+      width: 100%;
+      height: 6px;
+      background: #222;
+      border-radius: 3px;
+      margin-top: 16px;
+      overflow: hidden;
+    }
+    .timer-bar-inner {
+      height: 100%;
+      background: #6c63ff;
+      border-radius: 3px;
+      transition: width 0.3s linear;
+    }
+
+    /* Reveal */
+    #reveal-screen .correct-answer {
+      font-size: 1.4rem;
+      color: #4caf50;
+      font-weight: 700;
+      margin: 16px 0;
+      animation: revealBounce 0.5s ease;
+    }
+    @keyframes revealBounce {
+      0%   { transform: scale(0.4); opacity: 0; }
+      60%  { transform: scale(1.08); opacity: 1; }
+      100% { transform: scale(1); }
+    }
+    .scoreboard {
+      text-align: left;
+      max-width: 500px;
+      margin: 20px auto 0;
+    }
+    .scoreboard-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 16px;
+      border-radius: 10px;
+      margin-bottom: 6px;
+      background: #1a1a2e;
+      opacity: 0;
+      animation: rowSlide 0.35s ease forwards;
+    }
+    .scoreboard-row:nth-child(1) { animation-delay: 0.1s; }
+    .scoreboard-row:nth-child(2) { animation-delay: 0.18s; }
+    .scoreboard-row:nth-child(3) { animation-delay: 0.26s; }
+    .scoreboard-row:nth-child(4) { animation-delay: 0.34s; }
+    .scoreboard-row:nth-child(5) { animation-delay: 0.42s; }
+    .scoreboard-row:nth-child(n+6) { animation-delay: 0.5s; }
+    @keyframes rowSlide {
+      from { opacity: 0; transform: translateX(-20px); }
+      to   { opacity: 1; transform: translateX(0); }
+    }
+    .scoreboard-row.dead { opacity: 0.4; }
+    .sb-name { font-weight: 600; }
+    .sb-lives { letter-spacing: 2px; }
+    .sb-score { color: #6c63ff; font-weight: 600; }
+
+    /* Finished */
+    .podium {
+      display: flex;
+      justify-content: center;
+      align-items: flex-end;
+      gap: 16px;
+      margin: 32px 0;
+    }
+    .podium-item {
+      text-align: center;
+      border-radius: 14px;
+      padding: 20px 24px 16px;
+      min-width: 140px;
+      opacity: 0;
+      animation: podiumPop 0.5s ease forwards;
+    }
+    .podium-item:nth-child(1) { animation-delay: 0.15s; }
+    .podium-item:nth-child(2) { animation-delay: 0.35s; }
+    .podium-item:nth-child(3) { animation-delay: 0.55s; }
+    @keyframes podiumPop {
+      0%   { opacity: 0; transform: scale(0.5) translateY(20px); }
+      70%  { opacity: 1; transform: scale(1.06) translateY(-4px); }
+      100% { opacity: 1; transform: scale(1) translateY(0); }
+    }
+    .podium-item.gold   { background: #3a3520; border: 2px solid #ffd700; }
+    .podium-item.silver { background: #2a2a35; border: 2px solid #c0c0c0; }
+    .podium-item.bronze { background: #2e2520; border: 2px solid #cd7f32; }
+    .podium-rank { font-size: 2rem; }
+    .podium-name { font-weight: 700; font-size: 1.1rem; margin: 8px 0 4px; color: #fff; }
+    .podium-score { color: #aaa; font-size: 0.95rem; }
+
+    .full-rankings {
+      list-style: none;
+      text-align: left;
+      max-width: 500px;
+      margin: 0 auto;
+    }
+    .full-rankings li {
+      display: flex;
+      justify-content: space-between;
+      padding: 10px 16px;
+      margin-bottom: 6px;
+      border-radius: 10px;
+      background: #1a1a2e;
+      opacity: 0;
+      animation: rowSlide 0.3s ease forwards;
+    }
+    .full-rankings li:nth-child(1) { animation-delay: 0.6s; }
+    .full-rankings li:nth-child(2) { animation-delay: 0.7s; }
+    .full-rankings li:nth-child(3) { animation-delay: 0.8s; }
+    .full-rankings li:nth-child(4) { animation-delay: 0.9s; }
+    .full-rankings li:nth-child(5) { animation-delay: 1s; }
+    .full-rankings li:nth-child(n+6) { animation-delay: 1.1s; }
+    .full-rankings li:first-child { border: 1px solid #ffd700; }
+    .rank-pos { color: #6c63ff; font-weight: 700; margin-right: 12px; }
+
+    .error-msg { color: #f44336; margin-top: 12px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+
+    <!-- Lobby -->
+    <div id="lobby-screen" class="panel">
+      <h1>Quiz Game</h1>
+      <p class="subtitle">Host Dashboard</p>
+      <div class="player-count-label"><span id="playerCount">0</span> Players Joined</div>
+      <div class="player-grid" id="playerGrid"></div>
+      <button class="btn btn-start" id="startBtn">Start Game</button>
+      <p id="hostError" class="error-msg hidden"></p>
+    </div>
+
+    <!-- Question -->
+    <div id="question-screen" class="panel hidden">
+      <p class="q-number" id="hostQNum"></p>
+      <p class="q-text" id="hostQText"></p>
+      <div class="host-choices" id="hostChoices"></div>
+      <div class="timer-bar"><div class="timer-bar-inner" id="timerBar"></div></div>
+      <p class="answer-progress" id="answerProgress"></p>
+    </div>
+
+    <!-- Reveal -->
+    <div id="reveal-screen" class="panel hidden">
+      <h2>Answer Revealed</h2>
+      <p class="correct-answer">✓ <span id="correctAnswer"></span></p>
+      <div class="scoreboard" id="scoreboard"></div>
+    </div>
+
+    <!-- Finished -->
+    <div id="finished-screen" class="panel hidden">
+      <h1>🏆 Final Rankings</h1>
+      <div class="podium" id="podium"></div>
+      <ol class="full-rankings" id="fullRankings"></ol>
+      <button class="btn btn-restart" id="restartBtn">Play Again</button>
+    </div>
+
+  </div>
+
+  <script>
+    const ws = new WebSocket(`ws://${location.host}`);
+
+    const panels = ['lobby-screen', 'question-screen', 'reveal-screen', 'finished-screen'];
+    function show(id) {
+      panels.forEach(p => {
+        const el = document.getElementById(p);
+        if (p === id) {
+          el.classList.remove('hidden');
+          el.style.animation = 'none';
+          void el.offsetWidth;
+          el.style.animation = '';
+        } else {
+          el.classList.add('hidden');
+        }
+      });
+    }
+
+    let timerInterval = null;
+
+    ws.addEventListener('open', () => {
+      ws.send(JSON.stringify({ type: 'host-join' }));
+    });
+
+    document.getElementById('startBtn').addEventListener('click', () => {
+      ws.send(JSON.stringify({ type: 'start' }));
+    });
+
+    document.getElementById('restartBtn').addEventListener('click', () => {
+      ws.send(JSON.stringify({ type: 'restart' }));
+    });
+
+    function livesStr(n) {
+      return Array(Math.max(0, n)).fill('❤️').join('') +
+             Array(Math.max(0, 3 - n)).fill('🖤').join('');
+    }
+
+    function escapeHtml(str) {
+      const d = document.createElement('div');
+      d.textContent = str;
+      return d.innerHTML;
+    }
+
+    ws.addEventListener('message', (e) => {
+      const msg = JSON.parse(e.data);
+
+      switch (msg.type) {
+        case 'host-ok':
+          break;
+
+        case 'lobby': {
+          document.getElementById('playerCount').textContent = msg.players.length;
+          const grid = document.getElementById('playerGrid');
+          grid.innerHTML = '';
+          msg.players.forEach(p => {
+            const chip = document.createElement('div');
+            chip.className = 'player-chip';
+            chip.textContent = p.name;
+            grid.appendChild(chip);
+          });
+          show('lobby-screen');
+          break;
+        }
+
+        case 'error': {
+          const err = document.getElementById('hostError');
+          err.textContent = msg.message;
+          err.classList.remove('hidden');
+          setTimeout(() => err.classList.add('hidden'), 3000);
+          break;
+        }
+
+        case 'game-start':
+          show('question-screen');
+          document.getElementById('hostQText').textContent = 'Get Ready…';
+          document.getElementById('hostQNum').textContent = '';
+          document.getElementById('hostChoices').innerHTML = '';
+          document.getElementById('answerProgress').textContent = '';
+          break;
+
+        case 'question': {
+          show('question-screen');
+          document.getElementById('hostQNum').textContent = `Question ${msg.index + 1} of ${msg.total}`;
+          document.getElementById('hostQText').textContent = msg.question;
+          const choices = document.getElementById('hostChoices');
+          choices.innerHTML = '';
+          msg.choices.forEach(c => {
+            const div = document.createElement('div');
+            div.className = 'host-choice';
+            div.textContent = c;
+            choices.appendChild(div);
+          });
+          document.getElementById('answerProgress').textContent = 'Waiting for answers…';
+
+          // Timer bar (15s)
+          const bar = document.getElementById('timerBar');
+          bar.style.width = '100%';
+          let elapsed = 0;
+          clearInterval(timerInterval);
+          timerInterval = setInterval(() => {
+            elapsed += 100;
+            const pct = Math.max(0, 100 - (elapsed / 15000) * 100);
+            bar.style.width = pct + '%';
+            if (elapsed >= 15000) clearInterval(timerInterval);
+          }, 100);
+          break;
+        }
+
+        case 'answer-count':
+          document.getElementById('answerProgress').textContent =
+            `${msg.answered} / ${msg.total} answered`;
+          break;
+
+        case 'reveal': {
+          clearInterval(timerInterval);
+          show('reveal-screen');
+          document.getElementById('correctAnswer').textContent = msg.answer;
+          const sb = document.getElementById('scoreboard');
+          sb.innerHTML = '';
+          const sorted = [...msg.players].sort((a, b) => b.score - a.score || b.lives - a.lives);
+          sorted.forEach(p => {
+            const row = document.createElement('div');
+            row.className = 'scoreboard-row' + (p.alive ? '' : ' dead');
+            row.innerHTML = `<span class="sb-name">${escapeHtml(p.name)}</span>
+                             <span class="sb-lives">${livesStr(p.lives)}</span>
+                             <span class="sb-score">${p.score} pts</span>`;
+            sb.appendChild(row);
+          });
+          break;
+        }
+
+        case 'finished': {
+          clearInterval(timerInterval);
+          show('finished-screen');
+          const podium = document.getElementById('podium');
+          podium.innerHTML = '';
+          const medals = ['gold', 'silver', 'bronze'];
+          const rankIcons = ['🥇', '🥈', '🥉'];
+          msg.rankings.slice(0, 3).forEach((r, i) => {
+            const div = document.createElement('div');
+            div.className = `podium-item ${medals[i]}`;
+            div.innerHTML = `<div class="podium-rank">${rankIcons[i]}</div>
+                             <div class="podium-name">${escapeHtml(r.name)}</div>
+                             <div class="podium-score">${r.score} pts</div>`;
+            podium.appendChild(div);
+          });
+
+          const list = document.getElementById('fullRankings');
+          list.innerHTML = '';
+          msg.rankings.forEach((r, i) => {
+            const li = document.createElement('li');
+            li.innerHTML = `<span><span class="rank-pos">#${i + 1}</span>${escapeHtml(r.name)}</span>
+                            <span class="sb-score">${r.score} pts ${livesStr(r.lives)}</span>`;
+            list.appendChild(li);
+          });
+          break;
+        }
+
+        case 'restarted':
+          show('lobby-screen');
+          break;
+      }
+    });
+  </script>
+</body>
+</html>
