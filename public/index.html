@@ -699,6 +699,10 @@
       <div class="wager-banner hidden" id="wagerBanner">🎰 WAGER ROUND! Bet your points!</div>
       <div class="wager-row hidden" id="wagerRow">
         <input type="number" class="wager-input" id="wagerInput" min="0" placeholder="Wager" />
+        <div style="margin-top:8px;display:flex;gap:8px;justify-content:center;">
+          <button id="placeWagerBtn" style="width:auto;display:inline-block;padding:8px 12px;margin-left:8px;" class="btn btn-primary">Place Wager</button>
+          <button id="allInBtn" style="width:auto;display:inline-block;padding:8px 12px;margin-left:8px;" class="btn">All-in</button>
+        </div>
       </div>
       <div class="student-timer"><div class="student-timer-inner" id="studentTimer"></div></div>
       <p class="question-num" id="qNum"></p>
@@ -943,6 +947,7 @@
     let lastChoice = null;
     let studentTimerIv = null;
     let freezeTimerIv = null;
+    let isFrozen = false;
 
     let prevLives = 3;
 
@@ -974,6 +979,24 @@
 
     ws.addEventListener('message', (e) => {
       const msg = JSON.parse(e.data);
+
+      // Quick-path for wager placement acknowledgements
+      if (msg.type === 'wager-placed') {
+        const wInput = document.getElementById('wagerInput');
+        if (wInput) {
+          wInput.value = msg.amount;
+          wInput.disabled = true;
+        }
+        const placeBtn = document.getElementById('placeWagerBtn');
+        if (placeBtn) placeBtn.disabled = true;
+        const notif = document.getElementById('stealNotif');
+        if (notif) {
+          notif.textContent = `🎰 Wager placed: ${msg.amount}`;
+          notif.classList.remove('hidden');
+          setTimeout(() => notif.classList.add('hidden'), 2200);
+        }
+        return;
+      }
 
       switch (msg.type) {
         case 'registered':
@@ -1073,8 +1096,16 @@
             sfxWager();
             wBanner.classList.remove('hidden');
             wRow.classList.remove('hidden');
-            document.getElementById('wagerInput').max = msg.score || 0;
-            document.getElementById('wagerInput').value = Math.min(500, msg.score || 0);
+            const wagerInput = document.getElementById('wagerInput');
+            // Match server-side cap: only allow a fraction of current score to be wagered
+            const maxAllowed = Math.floor((msg.score || 0) * 0.33);
+            wagerInput.max = Math.max(0, maxAllowed);
+            // Default to half of the allowed max (conservative)
+            const defaultVal = maxAllowed > 0 ? Math.max(1, Math.floor(maxAllowed * 0.5)) : 0;
+            wagerInput.value = defaultVal;
+            wagerInput.disabled = false;
+            document.getElementById('placeWagerBtn').disabled = false;
+            document.getElementById('allInBtn').disabled = false;
           } else {
             wBanner.classList.add('hidden');
             wRow.classList.add('hidden');
@@ -1123,8 +1154,11 @@
               });
               btn.classList.add('selected');
               const payload = { type: 'answer', choice: c };
-              // Include wager if wager round
-              const wagerVal = parseInt(document.getElementById('wagerInput').value) || 0;
+              // Include wager if wager round; clamp to allowed max
+              const wagerInputEl = document.getElementById('wagerInput');
+              const raw = wagerInputEl ? parseInt(wagerInputEl.value) || 0 : 0;
+              const maxAllowed = wagerInputEl ? (parseInt(wagerInputEl.max) || 0) : 0;
+              const wagerVal = Math.max(0, Math.min(raw, maxAllowed));
               if (msg.wager) payload.wager = wagerVal;
               ws.send(JSON.stringify(payload));
             });
@@ -1396,8 +1430,15 @@
           const fo = document.getElementById('freezeOverlay');
           const fc = document.getElementById('freezeCountdown');
           fo.classList.remove('hidden');
-          // Disable choices while frozen
+          // Mark frozen state and disable choices + wager controls while frozen
+          isFrozen = true;
           document.querySelectorAll('#choices .choice-btn').forEach(b => b.disabled = true);
+          const wagerInputEl = document.getElementById('wagerInput');
+          if (wagerInputEl) wagerInputEl.disabled = true;
+          const placeBtn = document.getElementById('placeWagerBtn');
+          if (placeBtn) placeBtn.disabled = true;
+          const allInBtn = document.getElementById('allInBtn');
+          if (allInBtn) allInBtn.disabled = true;
           let freezeLeft = msg.duration || 3;
           fc.textContent = freezeLeft;
           clearInterval(freezeTimerIv);
@@ -1407,10 +1448,14 @@
             if (freezeLeft <= 0) {
               clearInterval(freezeTimerIv);
               fo.classList.add('hidden');
-              // Re-enable choices that weren't already selected
+              // Clear frozen flag and re-enable choices and wager controls
+              isFrozen = false;
               document.querySelectorAll('#choices .choice-btn').forEach(b => {
                 if (!b.classList.contains('selected')) b.disabled = false;
               });
+              if (wagerInputEl) wagerInputEl.disabled = false;
+              if (placeBtn) placeBtn.disabled = false;
+              if (allInBtn) allInBtn.disabled = false;
             }
           }, 1000);
           break;
@@ -1539,6 +1584,22 @@
         btn.classList.add('sent');
       });
     });
+    // Wager controls
+    const placeWagerBtn = document.getElementById('placeWagerBtn');
+    if (placeWagerBtn) {
+      placeWagerBtn.addEventListener('click', () => {
+        const amt = parseInt(document.getElementById('wagerInput').value) || 0;
+        ws.send(JSON.stringify({ type: 'place-wager', amount: amt }));
+        placeWagerBtn.disabled = true;
+      });
+    }
+    const allInBtn = document.getElementById('allInBtn');
+    if (allInBtn) {
+      allInBtn.addEventListener('click', () => {
+        const wi = document.getElementById('wagerInput');
+        if (wi) wi.value = parseInt(wi.max) || 0;
+      });
+    }
   </script>
 </body>
 </html>

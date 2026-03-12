@@ -53,6 +53,9 @@ let gameSettings = {
   enablePowerUps: true,
   enableSteal: true, // fastest steals from slowest each round
 };
+// Wager tuning
+const WAGER_MAX_FRACTION = 0.33; // max fraction of a player's score they may wager
+const WAGER_WIN_MULTIPLIER = 0.5; // fraction of wager awarded as bonus on correct answer
 let players = {}; // id -> { ws, name, emoji, lives, score, streak, alive, powerUp, team, frozen, stats }
 let fastestThisRound = null; // { id, name, timeMs, emoji }
 let slowestThisRound = null; // { id, name, timeMs }
@@ -153,6 +156,10 @@ function sendQuestion() {
   stealInfo = null;
   questionStartTime = Date.now();
   isWagerRound = gameSettings.enableWager && (currentQuestionIdx + 1) % 10 === 0;
+  // Reset wagers for this question so players must submit a fresh wager
+  if (isWagerRound) {
+    Object.values(players).forEach((p) => { p.wager = null; });
+  }
   const q = activeQuestions[currentQuestionIdx];
   const aliveCount = Object.values(players).filter((p) => p.alive).length;
   const totalPlayers = Object.keys(players).length;
@@ -410,7 +417,7 @@ function resetGame() {
     p.streak = 0;
     p.alive = true;
     p.powerUp = null;
-    p.wager = 0;
+    p.wager = null;
     p.frozen = 0;
     p.stats = { correct: 0, wrong: 0, totalTime: 0, answers: 0, bestStreak: 0, livesLost: 0 };
     // keep emoji and team across restarts
@@ -560,7 +567,7 @@ wss.on("connection", (ws) => {
           alive: true,
           powerUp: null,
           team: null,
-          wager: 0,
+          wager: null,
           frozen: 0,
           stats: { correct: 0, wrong: 0, totalTime: 0, answers: 0, bestStreak: 0, livesLost: 0 },
         };
@@ -617,9 +624,14 @@ wss.on("connection", (ws) => {
           slowestThisRound = { id: playerId, name: p.name, timeMs: answerTime };
         }
 
-        // Wager round: set wager amount
-        if (isWagerRound && typeof msg.wager === 'number') {
-          p.wager = Math.max(0, Math.min(msg.wager, p.score));
+        // Wager round: capture/validate wager (either via place-wager earlier or included here)
+        if (isWagerRound) {
+          if (typeof msg.wager === 'number') {
+            const amt = Math.max(0, Math.floor(msg.wager));
+            const maxAllowed = Math.floor(p.score * WAGER_MAX_FRACTION);
+            p.wager = Math.min(amt, maxAllowed);
+          }
+          if (p.wager === null || p.wager === undefined) p.wager = 0;
         }
 
         if (msg.choice === q.answer) {
@@ -627,17 +639,26 @@ wss.on("connection", (ws) => {
           p.stats.correct++;
           if (p.streak > p.stats.bestStreak) p.stats.bestStreak = p.streak;
           if (isWagerRound && p.wager > 0) {
-            p.score += p.wager;
-            p._lastPoints = p.wager;
+            // Wager grants a moderated bonus in addition to normal points
+            const basePts = calcPoints(answerTime, p.streak);
+            const wagerBonus = Math.round(p.wager * WAGER_WIN_MULTIPLIER);
+            let finalPts = basePts + wagerBonus;
             p._wasDouble = false;
+            if (p.powerUp === 'double') {
+              finalPts = finalPts * 2;
+              p._wasDouble = true;
+              p.powerUp = null;
+            }
+            p.score += finalPts;
+            p._lastPoints = finalPts;
           } else {
             const pts = calcPoints(answerTime, p.streak);
             const finalPts = p.powerUp === 'double' ? pts * 2 : pts;
             p.score += finalPts;
             p._lastPoints = finalPts;
             p._wasDouble = p.powerUp === 'double';
+            if (p.powerUp === 'double') p.powerUp = null;
           }
-          if (p.powerUp === 'double' && !isWagerRound) p.powerUp = null;
           // Award power-up randomly on streak (shield, double, or freeze)
           if (gameSettings.enablePowerUps && p.streak >= 3 && !p.powerUp && Math.random() < 0.25) {
             const r = Math.random();
@@ -663,7 +684,7 @@ wss.on("connection", (ws) => {
             if (p.lives <= 0) p.alive = false;
           }
         }
-        p.wager = 0;
+        p.wager = null;
 
         sendTo(ws, { type: "answer-ack" });
 
@@ -802,6 +823,32 @@ wss.on("connection", (ws) => {
             emoji,
             avatar: players[playerId].emoji,
           });
+        break;
+      }
+      case "place-wager": {
+        if (!gameRunning || !playerId || !players[playerId]) {
+          sendTo(ws, { type: 'error', message: 'Cannot place wager right now' });
+          return;
+        }
+        if (!isWagerRound) {
+          sendTo(ws, { type: 'error', message: 'Not a wager round' });
+          return;
+        }
+        const p = players[playerId];
+        if (!p.alive) {
+          sendTo(ws, { type: 'error', message: 'Eliminated players cannot wager' });
+          return;
+        }
+        const raw = Math.max(0, Math.floor(Number(msg.amount) || 0));
+        const maxAllowed = Math.floor(p.score * WAGER_MAX_FRACTION);
+        if (maxAllowed <= 0) {
+          sendTo(ws, { type: 'error', message: 'Not enough points to place a wager' });
+          return;
+        }
+        const amount = Math.min(raw, maxAllowed);
+        p.wager = amount;
+        sendTo(ws, { type: 'wager-placed', amount });
+        if (hostWs) sendTo(hostWs, { type: 'wager-placed', name: p.name, amount });
         break;
       }
     }
