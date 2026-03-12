@@ -44,9 +44,19 @@ function randomEmoji() {
 }
 
 // ── Game state ──────────────────────────────────────────────────
-const QUESTION_TIME = 15; // seconds per question
-let players = {}; // id -> { ws, name, emoji, lives, score, streak, alive, powerUp, team }
-let fastestThisRound = null; // { id, name, timeMs }
+let gameSettings = {
+  timer: 15,        // seconds per question
+  lives: 3,         // starting lives
+  questionCount: 20, // how many questions to use
+  enableWager: true,
+  enableRevenge: true,
+  enablePowerUps: true,
+  enableSteal: true, // fastest steals from slowest each round
+};
+let players = {}; // id -> { ws, name, emoji, lives, score, streak, alive, powerUp, team, frozen, stats }
+let fastestThisRound = null; // { id, name, timeMs, emoji }
+let slowestThisRound = null; // { id, name, timeMs }
+let stealInfo = null; // { from, to, amount } for reveal display
 let hostWs = null;
 let gameRunning = false;
 let gamePaused = false;
@@ -57,6 +67,9 @@ let questionStartTime = 0; // ms timestamp when question was sent
 let pausedRemaining = 0; // ms remaining when paused
 let nextPlayerId = 1;
 let teamMode = false;
+let isWagerRound = false;
+let revengeActive = false;
+let activeQuestions = []; // subset of QUESTIONS used for current game
 
 const TEAMS = [
   { name: 'Red', color: '#f44336', icon: '🔴' },
@@ -85,6 +98,7 @@ function playerList() {
       alive: p.alive,
       powerUp: p.powerUp,
       team: p.team,
+      spectating: !p.alive && p.lives <= 0,
     }))
     .sort((a, b) => b.score - a.score || b.lives - a.lives);
 }
@@ -110,7 +124,7 @@ function getRanks() {
 
 // Speed bonus: 1000 base, up to 500 bonus for speed, streak multiplier
 function calcPoints(answerTimeMs, streak) {
-  const timeFraction = Math.max(0, 1 - answerTimeMs / (QUESTION_TIME * 1000));
+  const timeFraction = Math.max(0, 1 - answerTimeMs / (gameSettings.timer * 1000));
   const speedBonus = Math.round(timeFraction * 500);
   const base = 1000 + speedBonus;
   const multiplier = streak >= 5 ? 2 : streak >= 3 ? 1.5 : 1;
@@ -128,42 +142,77 @@ function sendLobbyUpdate() {
 
 function sendQuestion() {
   currentQuestionIdx++;
-  if (currentQuestionIdx >= QUESTIONS.length) {
+  if (currentQuestionIdx >= activeQuestions.length) {
     endGame();
     return;
   }
 
   answersThisRound = new Set();
   fastestThisRound = null;
+  slowestThisRound = null;
+  stealInfo = null;
   questionStartTime = Date.now();
-  const q = QUESTIONS[currentQuestionIdx];
+  isWagerRound = gameSettings.enableWager && (currentQuestionIdx + 1) % 10 === 0;
+  const q = activeQuestions[currentQuestionIdx];
   const aliveCount = Object.values(players).filter((p) => p.alive).length;
   const totalPlayers = Object.keys(players).length;
+
+  // Apply freeze power-ups: find players who have freeze, pick a random opponent to freeze
+  if (gameSettings.enablePowerUps) {
+    Object.entries(players).forEach(([id, p]) => {
+      if (p.alive && p.powerUp === 'freeze') {
+        const targets = Object.entries(players).filter(([tid, tp]) => tid !== id && tp.alive && !tp.frozen);
+        if (targets.length > 0) {
+          const [tid, tp] = targets[Math.floor(Math.random() * targets.length)];
+          tp.frozen = 3; // frozen for 3 seconds
+          sendTo(tp.ws, { type: 'frozen', frozenBy: p.name, duration: 3 });
+          sendTo(p.ws, { type: 'freeze-used', target: tp.name });
+        }
+        p.powerUp = null;
+      }
+    });
+  }
 
   // Host sees full question
   sendTo(hostWs, {
     type: "question",
     index: currentQuestionIdx,
-    total: QUESTIONS.length,
+    total: activeQuestions.length,
     question: q.question,
     choices: q.choices,
     aliveCount,
     totalPlayers,
-    timeLimit: QUESTION_TIME,
+    timeLimit: gameSettings.timer,
+    wager: isWagerRound,
   });
 
   // Students see question + two choices + their streak
   Object.entries(players).forEach(([id, p]) => {
-    if (!p.alive) return;
+    if (!p.alive) {
+      // Spectators still see the question
+      sendTo(p.ws, {
+        type: "spectate-question",
+        index: currentQuestionIdx,
+        total: activeQuestions.length,
+        question: q.question,
+        choices: q.choices,
+        timeLimit: gameSettings.timer,
+        wager: isWagerRound,
+      });
+      return;
+    }
     sendTo(p.ws, {
       type: "question",
       index: currentQuestionIdx,
-      total: QUESTIONS.length,
+      total: activeQuestions.length,
       question: q.question,
       choices: q.choices,
       streak: p.streak,
       powerUp: p.powerUp,
-      timeLimit: QUESTION_TIME,
+      timeLimit: gameSettings.timer,
+      wager: isWagerRound,
+      score: p.score,
+      frozen: p.frozen || 0,
     });
   });
 
@@ -173,16 +222,34 @@ function sendQuestion() {
     Object.entries(players).forEach(([id, p]) => {
       if (p.alive && !answersThisRound.has(id)) {
         p.lives--;
+        p.stats.livesLost++;
+        p.stats.wrong++;
         p.streak = 0;
         if (p.lives <= 0) p.alive = false;
       }
     });
     revealAnswer();
-  }, QUESTION_TIME * 1000);
+  }, gameSettings.timer * 1000);
 }
 
 function revealAnswer() {
-  const q = QUESTIONS[currentQuestionIdx];
+  const q = activeQuestions[currentQuestionIdx];
+
+  // Point steal: fastest correct steals from slowest correct
+  if (gameSettings.enableSteal && fastestThisRound && slowestThisRound && fastestThisRound.id !== slowestThisRound.id) {
+    const stealAmt = 150;
+    const victim = players[slowestThisRound.id];
+    const thief = players[fastestThisRound.id];
+    if (victim && thief && victim.score >= stealAmt) {
+      victim.score -= stealAmt;
+      thief.score += stealAmt;
+      stealInfo = { from: victim.name, fromEmoji: victim.emoji, to: thief.name, toEmoji: thief.emoji, amount: stealAmt };
+    }
+  }
+
+  // Clear frozen status for next round
+  Object.values(players).forEach(p => { p.frozen = 0; });
+
   const list = playerList();
   const ranks = getRanks();
   const aliveCount = Object.values(players).filter((p) => p.alive).length;
@@ -192,15 +259,27 @@ function revealAnswer() {
     answer: q.answer,
     players: list,
     index: currentQuestionIdx,
-    total: QUESTIONS.length,
+    total: activeQuestions.length,
     aliveCount,
     fastest: fastestThisRound ? fastestThisRound.name : null,
     fastestEmoji: fastestThisRound ? fastestThisRound.emoji : null,
+    steal: stealInfo,
     teamMode,
     teamScores: teamMode ? teamScores() : null,
+    wager: isWagerRound,
   });
 
   Object.entries(players).forEach(([id, p]) => {
+    if (!p.alive && !p._lastPoints) {
+      // Spectators see reveal too
+      sendTo(p.ws, {
+        type: "spectate-reveal",
+        answer: q.answer,
+        players: list,
+        wager: isWagerRound,
+      });
+      return;
+    }
     sendTo(p.ws, {
       type: "reveal",
       answer: q.answer,
@@ -215,6 +294,7 @@ function revealAnswer() {
       wasDouble: p._wasDouble || false,
       newPowerUp: p._newPowerUp || null,
       powerUp: p.powerUp,
+      steal: stealInfo,
     });
     delete p._lastPoints;
     delete p._shieldUsed;
@@ -225,9 +305,12 @@ function revealAnswer() {
   // Next question after 4 seconds (with intermission every 5 questions)
   setTimeout(() => {
     const anyAlive = Object.values(players).some((p) => p.alive);
+    const eliminated = Object.values(players).filter((p) => !p.alive);
     if (!anyAlive) {
       endGame();
-    } else if ((currentQuestionIdx + 1) % 5 === 0 && currentQuestionIdx + 1 < QUESTIONS.length) {
+    } else if (gameSettings.enableRevenge && eliminated.length > 0 && (currentQuestionIdx + 1) % 7 === 0 && currentQuestionIdx + 1 < activeQuestions.length) {
+      startRevengeRound();
+    } else if ((currentQuestionIdx + 1) % 5 === 0 && currentQuestionIdx + 1 < activeQuestions.length) {
       sendIntermission();
     } else {
       sendQuestion();
@@ -244,7 +327,7 @@ function sendIntermission() {
     type: "intermission",
     rankings: list,
     questionsCompleted: currentQuestionIdx + 1,
-    questionsTotal: QUESTIONS.length,
+    questionsTotal: activeQuestions.length,
     streakLeader: streakLeader
       ? { name: streakLeader.name, emoji: streakLeader.emoji, streak: streakLeader.streak }
       : null,
@@ -257,11 +340,53 @@ function sendIntermission() {
 function endGame() {
   gameRunning = false;
   gamePaused = false;
-  const rankings = Object.values(players)
-    .map((p) => ({ name: p.name, emoji: p.emoji, score: p.score, lives: p.lives, team: p.team }))
+  revengeActive = false;
+
+  // Compute awards
+  const allPlayers = Object.values(players);
+  const awards = [];
+  // Speed Demon: fastest avg response time (min 3 answers)
+  const withAnswers = allPlayers.filter(p => p.stats.answers >= 3);
+  if (withAnswers.length > 0) {
+    const fastest = withAnswers.reduce((a, b) => (a.stats.totalTime / a.stats.answers) < (b.stats.totalTime / b.stats.answers) ? a : b);
+    awards.push({ title: 'Speed Demon', icon: '\u26A1', name: fastest.name, emoji: fastest.emoji, detail: Math.round(fastest.stats.totalTime / fastest.stats.answers) + 'ms avg' });
+  }
+  // Iron Will: never lost a life
+  const ironWill = allPlayers.filter(p => p.stats.livesLost === 0 && p.stats.answers > 0);
+  if (ironWill.length > 0) {
+    ironWill.forEach(p => awards.push({ title: 'Iron Will', icon: '\uD83D\uDEE1\uFE0F', name: p.name, emoji: p.emoji, detail: 'Never lost a life' }));
+  }
+  // Hot Streak: longest streak
+  const streakSorted = [...allPlayers].sort((a, b) => b.stats.bestStreak - a.stats.bestStreak);
+  if (streakSorted.length > 0 && streakSorted[0].stats.bestStreak >= 3) {
+    const s = streakSorted[0];
+    awards.push({ title: 'Hot Streak', icon: '\uD83D\uDD25', name: s.name, emoji: s.emoji, detail: s.stats.bestStreak + ' in a row' });
+  }
+  // Comeback Kid: lowest score at intermission who ended top half (approximate: lost lives but still alive)
+  const comebackCandidates = allPlayers.filter(p => p.stats.livesLost > 0 && p.alive);
+  if (comebackCandidates.length > 0) {
+    const ranked = [...allPlayers].sort((a, b) => b.score - a.score);
+    const topHalf = ranked.slice(0, Math.ceil(ranked.length / 2));
+    const comeback = comebackCandidates.find(p => topHalf.some(t => t.name === p.name));
+    if (comeback) {
+      awards.push({ title: 'Comeback Kid', icon: '\uD83D\uDCAA', name: comeback.name, emoji: comeback.emoji, detail: 'Survived ' + comeback.stats.livesLost + ' life loss(es)' });
+    }
+  }
+
+  const rankings = allPlayers
+    .map((p) => ({
+      name: p.name, emoji: p.emoji, score: p.score, lives: p.lives, team: p.team,
+      stats: {
+        accuracy: p.stats.answers > 0 ? Math.round((p.stats.correct / p.stats.answers) * 100) : 0,
+        avgTime: p.stats.answers > 0 ? Math.round(p.stats.totalTime / p.stats.answers) : 0,
+        bestStreak: p.stats.bestStreak,
+        correct: p.stats.correct,
+        wrong: p.stats.wrong,
+      },
+    }))
     .sort((a, b) => b.score - a.score || b.lives - a.lives);
 
-  broadcast({ type: "finished", rankings, teamMode, teamScores: teamMode ? teamScores() : null });
+  broadcast({ type: "finished", rankings, awards, teamMode, teamScores: teamMode ? teamScores() : null });
 }
 
 function resetGame() {
@@ -270,15 +395,112 @@ function resetGame() {
   pausedRemaining = 0;
   currentQuestionIdx = -1;
   answersThisRound = new Set();
+  isWagerRound = false;
+  revengeActive = false;
+  stealInfo = null;
+  fastestThisRound = null;
+  slowestThisRound = null;
+  // Build active question set based on settings
+  const shuffled = [...QUESTIONS].sort(() => Math.random() - 0.5);
+  activeQuestions = shuffled.slice(0, Math.min(gameSettings.questionCount, QUESTIONS.length));
   if (questionTimer) clearTimeout(questionTimer);
   Object.values(players).forEach((p) => {
-    p.lives = 3;
+    p.lives = gameSettings.lives;
     p.score = 0;
     p.streak = 0;
     p.alive = true;
     p.powerUp = null;
+    p.wager = 0;
+    p.frozen = 0;
+    p.stats = { correct: 0, wrong: 0, totalTime: 0, answers: 0, bestStreak: 0, livesLost: 0 };
     // keep emoji and team across restarts
   });
+}
+
+// ── Revenge Round ─────────────────────────────────────────────
+function startRevengeRound() {
+  revengeActive = true;
+  const eliminated = Object.entries(players).filter(([, p]) => !p.alive);
+  if (eliminated.length === 0) { revengeActive = false; sendQuestion(); return; }
+
+  // Pick a random question from remaining pool (don't advance index)
+  const remainingQs = activeQuestions.filter((_, i) => i > currentQuestionIdx);
+  const rq = remainingQs.length > 0 ? remainingQs[Math.floor(Math.random() * remainingQs.length)] : activeQuestions[Math.floor(Math.random() * activeQuestions.length)];
+  const revengeAnswers = new Set();
+  const revengeStartTime = Date.now();
+  const REVENGE_TIME = 10;
+
+  // Notify everyone
+  broadcast({
+    type: "revenge-start",
+    question: rq.question,
+    choices: rq.choices,
+    timeLimit: REVENGE_TIME,
+    eliminatedNames: eliminated.map(([, p]) => p.name),
+  });
+
+  // Alive players just watch; eliminated players get a temp handler
+  const revengeHandler = (raw) => {
+    let rmsg;
+    try { rmsg = JSON.parse(raw); } catch { return; }
+    if (rmsg.type !== 'revenge-answer') return;
+    const entry = eliminated.find(([, p]) => p.ws === ws);
+    if (!entry) return;
+    const [rid] = entry;
+    if (revengeAnswers.has(rid)) return;
+    revengeAnswers.add(rid);
+    // Check answer
+    if (rmsg.choice === rq.answer) {
+      players[rid].alive = true;
+      players[rid].lives = 1;
+      players[rid].streak = 0;
+      sendTo(players[rid].ws, { type: "revenge-result", revived: true });
+    } else {
+      sendTo(players[rid].ws, { type: "revenge-result", revived: false, answer: rq.answer });
+    }
+  };
+
+  // We need per-connection handling. Use a simpler approach: store handlers and clean up
+  const wsHandlers = new Map();
+  eliminated.forEach(([id, p]) => {
+    const handler = (raw) => {
+      let rmsg;
+      try { rmsg = JSON.parse(raw); } catch { return; }
+      if (rmsg.type !== 'revenge-answer') return;
+      if (revengeAnswers.has(id)) return;
+      revengeAnswers.add(id);
+      if (rmsg.choice === rq.answer) {
+        players[id].alive = true;
+        players[id].lives = 1;
+        players[id].streak = 0;
+        sendTo(p.ws, { type: "revenge-result", revived: true });
+      } else {
+        sendTo(p.ws, { type: "revenge-result", revived: false, answer: rq.answer });
+      }
+    };
+    p.ws.on('message', handler);
+    wsHandlers.set(id, handler);
+  });
+
+  // Timer for revenge round
+  setTimeout(() => {
+    // Clean up handlers
+    wsHandlers.forEach((handler, id) => {
+      if (players[id] && players[id].ws) {
+        players[id].ws.removeListener('message', handler);
+      }
+    });
+    // Notify host of revenge results
+    const revived = eliminated.filter(([id]) => players[id] && players[id].alive).map(([, p]) => p.name);
+    broadcast({
+      type: "revenge-end",
+      answer: rq.answer,
+      revived,
+    });
+    revengeActive = false;
+    // Continue game after brief pause
+    setTimeout(() => sendQuestion(), 3000);
+  }, REVENGE_TIME * 1000);
 }
 
 function assignTeams() {
@@ -312,6 +534,7 @@ wss.on("connection", (ws) => {
         hostWs = ws;
         sendTo(ws, { type: "host-ok" });
         sendTo(ws, { type: "lobby", players: playerList(), teamMode });
+        sendTo(ws, { type: "settings-updated", settings: gameSettings });
         break;
       }
 
@@ -331,12 +554,15 @@ wss.on("connection", (ws) => {
           ws,
           name,
           emoji,
-          lives: 3,
+          lives: gameSettings.lives,
           score: 0,
           streak: 0,
           alive: true,
           powerUp: null,
           team: null,
+          wager: 0,
+          frozen: 0,
+          stats: { correct: 0, wrong: 0, totalTime: 0, answers: 0, bestStreak: 0, livesLost: 0 },
         };
         // Auto-assign team if team mode is on
         if (teamMode) {
@@ -348,7 +574,7 @@ wss.on("connection", (ws) => {
           const smallest = TEAMS.reduce((a, b) => (counts[a.name] <= counts[b.name] ? a : b));
           players[playerId].team = smallest.name;
         }
-        sendTo(ws, { type: "registered", name, emoji, lives: 3, team: players[playerId].team, teamMode });
+        sendTo(ws, { type: "registered", name, emoji, lives: gameSettings.lives, team: players[playerId].team, teamMode });
         sendLobbyUpdate();
         break;
       }
@@ -369,30 +595,53 @@ wss.on("connection", (ws) => {
 
       case "answer": {
         if (!gameRunning || !playerId || !players[playerId]) return;
+        if (revengeActive) return;
         const p = players[playerId];
         if (!p.alive) return;
         if (answersThisRound.has(playerId)) return;
         answersThisRound.add(playerId);
 
-        const q = QUESTIONS[currentQuestionIdx];
+        const q = activeQuestions[currentQuestionIdx];
         const answerTime = Date.now() - questionStartTime;
+
+        // Track stats
+        p.stats.totalTime += answerTime;
+        p.stats.answers++;
 
         // Track fastest correct answer
         if (msg.choice === q.answer && (!fastestThisRound || answerTime < fastestThisRound.timeMs)) {
           fastestThisRound = { id: playerId, name: p.name, emoji: p.emoji, timeMs: answerTime };
         }
+        // Track slowest correct answer (for steal)
+        if (msg.choice === q.answer && (!slowestThisRound || answerTime > slowestThisRound.timeMs)) {
+          slowestThisRound = { id: playerId, name: p.name, timeMs: answerTime };
+        }
+
+        // Wager round: set wager amount
+        if (isWagerRound && typeof msg.wager === 'number') {
+          p.wager = Math.max(0, Math.min(msg.wager, p.score));
+        }
 
         if (msg.choice === q.answer) {
           p.streak++;
-          const pts = calcPoints(answerTime, p.streak);
-          const finalPts = p.powerUp === 'double' ? pts * 2 : pts;
-          p.score += finalPts;
-          p._lastPoints = finalPts;
-          p._wasDouble = p.powerUp === 'double';
-          if (p.powerUp === 'double') p.powerUp = null;
-          // Award power-up randomly on streak
-          if (p.streak >= 3 && !p.powerUp && Math.random() < 0.25) {
-            p.powerUp = Math.random() < 0.5 ? 'double' : 'shield';
+          p.stats.correct++;
+          if (p.streak > p.stats.bestStreak) p.stats.bestStreak = p.streak;
+          if (isWagerRound && p.wager > 0) {
+            p.score += p.wager;
+            p._lastPoints = p.wager;
+            p._wasDouble = false;
+          } else {
+            const pts = calcPoints(answerTime, p.streak);
+            const finalPts = p.powerUp === 'double' ? pts * 2 : pts;
+            p.score += finalPts;
+            p._lastPoints = finalPts;
+            p._wasDouble = p.powerUp === 'double';
+          }
+          if (p.powerUp === 'double' && !isWagerRound) p.powerUp = null;
+          // Award power-up randomly on streak (shield, double, or freeze)
+          if (gameSettings.enablePowerUps && p.streak >= 3 && !p.powerUp && Math.random() < 0.25) {
+            const r = Math.random();
+            p.powerUp = r < 0.33 ? 'double' : r < 0.66 ? 'shield' : 'freeze';
             p._newPowerUp = p.powerUp;
           }
         } else if (p.powerUp === 'shield') {
@@ -400,12 +649,21 @@ wss.on("connection", (ws) => {
           p._shieldUsed = true;
           p.streak = 0;
           p._lastPoints = 0;
+          p.stats.wrong++;
         } else {
           p.streak = 0;
-          p.lives--;
-          p._lastPoints = 0;
-          if (p.lives <= 0) p.alive = false;
+          p.stats.wrong++;
+          if (isWagerRound && p.wager > 0) {
+            p.score = Math.max(0, p.score - p.wager);
+            p._lastPoints = -p.wager;
+          } else {
+            p.lives--;
+            p.stats.livesLost++;
+            p._lastPoints = 0;
+            if (p.lives <= 0) p.alive = false;
+          }
         }
+        p.wager = 0;
 
         sendTo(ws, { type: "answer-ack" });
 
@@ -458,7 +716,7 @@ wss.on("connection", (ws) => {
         gamePaused = true;
         // Capture how much time remains on the question timer
         const elapsed = Date.now() - questionStartTime;
-        pausedRemaining = Math.max(0, QUESTION_TIME * 1000 - elapsed);
+        pausedRemaining = Math.max(0, gameSettings.timer * 1000 - elapsed);
         clearTimeout(questionTimer);
         broadcast({ type: "paused" });
         break;
@@ -467,7 +725,7 @@ wss.on("connection", (ws) => {
       case "resume": {
         if (!isHost || !gameRunning || !gamePaused) return;
         gamePaused = false;
-        questionStartTime = Date.now() - (QUESTION_TIME * 1000 - pausedRemaining);
+        questionStartTime = Date.now() - (gameSettings.timer * 1000 - pausedRemaining);
         questionTimer = setTimeout(() => {
           Object.entries(players).forEach(([id, p]) => {
             if (p.alive && !answersThisRound.has(id)) {
@@ -519,10 +777,24 @@ wss.on("connection", (ws) => {
         break;
       }
 
+      case "update-settings": {
+        if (!isHost || gameRunning) return;
+        if (typeof msg.timer === 'number' && [5, 10, 15, 20, 30].includes(msg.timer)) gameSettings.timer = msg.timer;
+        if (typeof msg.lives === 'number' && msg.lives >= 1 && msg.lives <= 5) gameSettings.lives = Math.floor(msg.lives);
+        if (typeof msg.questionCount === 'number' && [5, 10, 15, 20].includes(msg.questionCount)) gameSettings.questionCount = msg.questionCount;
+        if (typeof msg.enableWager === 'boolean') gameSettings.enableWager = msg.enableWager;
+        if (typeof msg.enableRevenge === 'boolean') gameSettings.enableRevenge = msg.enableRevenge;
+        if (typeof msg.enablePowerUps === 'boolean') gameSettings.enablePowerUps = msg.enablePowerUps;
+        if (typeof msg.enableSteal === 'boolean') gameSettings.enableSteal = msg.enableSteal;
+        sendTo(ws, { type: 'settings-updated', settings: gameSettings });
+        break;
+      }
+
       case "reaction": {
         if (!playerId || !players[playerId] || !gameRunning) return;
         const emoji = String(msg.emoji || "");
         if (!["\uD83D\uDE31", "\uD83C\uDF89", "\uD83D\uDE24", "\uD83E\uDD2F"].includes(emoji)) return;
+        // Allow both alive players and spectators to react
         if (hostWs)
           sendTo(hostWs, {
             type: "reaction",

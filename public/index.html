@@ -359,6 +359,7 @@
     .power-up-active.hidden { display: none !important; }
     .power-up-active.shield { background: linear-gradient(135deg, #00bcd4, #0097a7); color: #fff; }
     .power-up-active.double { background: linear-gradient(135deg, #ffd700, #ff9800); color: #1a1a2e; }
+    .power-up-active.freeze { background: linear-gradient(135deg, #81d4fa, #0288d1); color: #fff; }
     @keyframes powerUpPulse {
       0%, 100% { transform: scale(1); }
       50% { transform: scale(1.05); box-shadow: 0 0 12px rgba(255, 215, 0, 0.3); }
@@ -501,6 +502,147 @@
 
     /* Kicked */
     .kicked-text { font-size: 1.4rem; color: #f44336; font-weight: 700; margin: 20px 0; }
+
+    /* Wager round */
+    .wager-banner {
+      background: linear-gradient(135deg, #ffd700, #ff9800);
+      color: #1a1a2e;
+      padding: 8px 18px;
+      border-radius: 12px;
+      font-weight: 800;
+      font-size: 0.95rem;
+      margin-bottom: 12px;
+      animation: pulse 1.2s infinite;
+    }
+    .wager-banner.hidden { display: none !important; }
+    .wager-input {
+      width: 120px;
+      padding: 8px 12px;
+      font-size: 1rem;
+      font-weight: 700;
+      border: 2px solid #ffd700;
+      border-radius: 10px;
+      background: #1a1a2e;
+      color: #ffd700;
+      text-align: center;
+      margin-bottom: 12px;
+    }
+    .wager-row { margin-bottom: 12px; }
+    .wager-row.hidden { display: none !important; }
+
+    /* Spectator */
+    .spectator-bar {
+      background: linear-gradient(135deg, #333, #1a1a2e);
+      border: 1px solid #555;
+      padding: 10px 18px;
+      border-radius: 12px;
+      font-size: 0.9rem;
+      color: #aaa;
+      margin-bottom: 16px;
+    }
+    .spectator-bar .spectator-tag {
+      color: #ff9800;
+      font-weight: 700;
+    }
+
+    /* Revenge round */
+    .revenge-banner {
+      background: linear-gradient(135deg, #f44336, #ff5722);
+      color: #fff;
+      padding: 12px 22px;
+      border-radius: 14px;
+      font-weight: 800;
+      font-size: 1.1rem;
+      margin-bottom: 16px;
+      animation: pulse 0.8s infinite;
+    }
+
+    /* Visual urgency */
+    .urgent-screen {
+      animation: urgentShake 0.3s ease infinite;
+    }
+    @keyframes urgentShake {
+      0%, 100% { transform: translateX(0); }
+      25% { transform: translateX(-2px); }
+      75% { transform: translateX(2px); }
+    }
+    .urgent-vignette {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 90;
+      box-shadow: inset 0 0 80px rgba(244, 67, 54, 0.4);
+      opacity: 0;
+      transition: opacity 0.5s;
+    }
+    .urgent-vignette.active { opacity: 1; }
+
+    /* Awards */
+    .awards-section {
+      margin: 20px 0;
+    }
+    .award-card {
+      background: #1a1a2e;
+      border: 1px solid #333;
+      border-radius: 12px;
+      padding: 12px 18px;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      animation: fadeSlideIn 0.4s ease backwards;
+    }
+    .award-icon { font-size: 1.8rem; }
+    .award-info { text-align: left; }
+    .award-title { color: #ffd700; font-weight: 700; font-size: 0.95rem; }
+    .award-name { color: #aaa; font-size: 0.85rem; }
+
+    /* Stats row */
+    .stats-row {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin: 14px 0;
+    }
+    .stat-card {
+      background: #1a1a2e;
+      border: 1px solid #333;
+      border-radius: 10px;
+      padding: 10px 14px;
+      min-width: 80px;
+    }
+    .stat-value { font-size: 1.3rem; font-weight: 800; color: #6c63ff; }
+    .stat-label { font-size: 0.7rem; color: #888; }
+
+    /* Freeze overlay */
+    .freeze-overlay {
+      position: fixed; inset: 0;
+      background: radial-gradient(ellipse at center, rgba(129,212,250,0.35) 0%, rgba(2,136,209,0.55) 100%);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 250;
+      pointer-events: none;
+      animation: freezePulse 0.8s ease infinite;
+    }
+    .freeze-overlay.hidden { display: none !important; }
+    .freeze-text { font-size: 2.5rem; font-weight: 800; color: #fff; text-shadow: 0 0 20px #0288d1; }
+    @keyframes freezePulse {
+      0%, 100% { opacity: 0.85; }
+      50% { opacity: 1; }
+    }
+
+    /* Steal notification */
+    .steal-notif {
+      background: linear-gradient(135deg, #f44336, #ff9800);
+      color: #fff;
+      padding: 8px 16px;
+      border-radius: 12px;
+      font-weight: 700;
+      font-size: 0.9rem;
+      margin-top: 8px;
+      animation: powerUpReveal 0.5s ease;
+    }
+    .steal-notif.hidden { display: none !important; }
   </style>
 </head>
 <body>
@@ -509,6 +651,14 @@
     <!-- Flash overlay for correct/wrong feedback -->
     <div class="flash-overlay" id="flashOverlay"></div>
     <canvas id="confetti"></canvas>
+
+    <!-- Urgency vignette -->
+    <div id="urgentVignette" class="urgent-vignette"></div>
+
+    <!-- Freeze overlay -->
+    <div id="freezeOverlay" class="freeze-overlay hidden">
+      <div class="freeze-text">❄️ FROZEN! <span id="freezeCountdown">3</span></div>
+    </div>
 
     <!-- Register screen -->
     <div id="register" class="screen">
@@ -546,6 +696,10 @@
       <div class="lives-display" id="gameLives">❤️ ❤️ ❤️</div>
       <div class="streak-badge hidden" id="streakBadge"></div>
       <div class="power-up-active hidden" id="powerUpBadge"></div>
+      <div class="wager-banner hidden" id="wagerBanner">🎰 WAGER ROUND! Bet your points!</div>
+      <div class="wager-row hidden" id="wagerRow">
+        <input type="number" class="wager-input" id="wagerInput" min="0" placeholder="Wager" />
+      </div>
       <div class="student-timer"><div class="student-timer-inner" id="studentTimer"></div></div>
       <p class="question-num" id="qNum"></p>
       <p class="question-text" id="qText"></p>
@@ -559,6 +713,7 @@
       <p id="pointsEarned" class="points-earned"></p>
       <div class="lives-display" id="revealLives"></div>
       <div id="rankDisplay" class="rank-display"></div>
+      <div id="stealNotif" class="steal-notif hidden"></div>
       <div id="powerUpNotif" class="power-up-notif hidden"></div>
       <div class="reaction-bar">
         <button class="reaction-btn" data-emoji="\uD83D\uDE31">😱</button>
@@ -577,10 +732,26 @@
       <p class="intermission-msg">Next round starting soon...</p>
     </div>
 
-    <!-- Eliminated -->
+    <!-- Eliminated (now spectator) -->
     <div id="eliminated" class="screen hidden">
       <p class="eliminated-text">💀 You've been eliminated!</p>
-      <p class="subtitle">Better luck next time</p>
+      <p class="subtitle">You're now spectating</p>
+      <div class="spectator-bar"><span class="spectator-tag">👁️ SPECTATOR</span> — Watch the game continue</div>
+      <div id="spectatorContent"></div>
+      <div class="reaction-bar">
+        <button class="reaction-btn" data-emoji="\uD83D\uDE31">😱</button>
+        <button class="reaction-btn" data-emoji="\uD83C\uDF89">🎉</button>
+        <button class="reaction-btn" data-emoji="\uD83D\uDE24">😤</button>
+        <button class="reaction-btn" data-emoji="\uD83E\uDD2F">🤯</button>
+      </div>
+    </div>
+
+    <!-- Revenge round -->
+    <div id="revenge" class="screen hidden">
+      <div class="revenge-banner">💀 REVENGE ROUND!</div>
+      <p class="subtitle">Answer correctly to revive with 1 life!</p>
+      <p class="question-text" id="revengeQText"></p>
+      <div class="choices" id="revengeChoices"></div>
     </div>
 
     <!-- Kicked -->
@@ -597,6 +768,8 @@
     <!-- Finished -->
     <div id="finished" class="screen hidden">
       <h2>🏆 Game Over</h2>
+      <div class="stats-row" id="myStats"></div>
+      <div class="awards-section" id="awardsSection"></div>
       <ol class="rank-list" id="rankList"></ol>
     </div>
 
@@ -605,7 +778,7 @@
   <script>
     const ws = new WebSocket(`ws://${location.host}`);
 
-    const screens = ['register', 'lobby', 'starting', 'game', 'reveal', 'intermission', 'eliminated', 'kicked', 'finished'];
+    const screens = ['register', 'lobby', 'starting', 'game', 'reveal', 'intermission', 'eliminated', 'kicked', 'revenge', 'finished'];
     function show(id) {
       screens.forEach(s => {
         const el = document.getElementById(s);
@@ -675,6 +848,53 @@
       setTimeout(() => playTone(784, 'square', 0.15, 0.2), 300);
       setTimeout(() => playTone(1047, 'square', 0.4, 0.25), 450);
     }
+    // Escalating tick: pitch rises as time runs out
+    function sfxTickEscalating(remaining) {
+      const pitch = 600 + Math.max(0, (5000 - remaining) / 5000) * 600;
+      playTone(pitch, 'sine', 0.04, 0.12 + (5000 - remaining) / 5000 * 0.1);
+    }
+    // Multiple reveal jingles (random)
+    function sfxRevealVariant() {
+      const v = Math.floor(Math.random() * 3);
+      if (v === 0) { sfxCorrect(); }
+      else if (v === 1) {
+        playTone(660, 'triangle', 0.12, 0.25);
+        setTimeout(() => playTone(880, 'triangle', 0.2, 0.25), 100);
+      } else {
+        playTone(440, 'sine', 0.1, 0.2);
+        setTimeout(() => playTone(554, 'sine', 0.1, 0.2), 80);
+        setTimeout(() => playTone(660, 'sine', 0.2, 0.25), 160);
+      }
+    }
+    function sfxStreak() {
+      playTone(880, 'triangle', 0.08, 0.2);
+      setTimeout(() => playTone(1100, 'triangle', 0.08, 0.2), 60);
+      setTimeout(() => playTone(1320, 'triangle', 0.15, 0.25), 120);
+    }
+    function sfxPowerUp() {
+      playTone(523, 'sine', 0.1, 0.2);
+      setTimeout(() => playTone(784, 'sine', 0.1, 0.2), 80);
+      setTimeout(() => playTone(1047, 'sine', 0.2, 0.25), 160);
+    }
+    function sfxFreeze() {
+      playTone(1200, 'sine', 0.3, 0.2, 400);
+    }
+    function sfxSteal() {
+      playTone(200, 'sawtooth', 0.15, 0.2);
+      setTimeout(() => playTone(300, 'sawtooth', 0.15, 0.2), 100);
+      setTimeout(() => playTone(600, 'sawtooth', 0.2, 0.25), 200);
+    }
+    function sfxWager() {
+      playTone(440, 'square', 0.08, 0.15);
+      setTimeout(() => playTone(554, 'square', 0.08, 0.15), 100);
+      setTimeout(() => playTone(659, 'square', 0.08, 0.15), 200);
+      setTimeout(() => playTone(880, 'square', 0.2, 0.2), 300);
+    }
+    function sfxRevenge() {
+      playTone(220, 'sawtooth', 0.2, 0.2);
+      setTimeout(() => playTone(330, 'sawtooth', 0.2, 0.2), 150);
+      setTimeout(() => playTone(440, 'sawtooth', 0.3, 0.25), 300);
+    }
 
     // ── Ambient music during questions ─────────────────
     let ambientOsc = null, ambientGain = null, ambientLfo = null;
@@ -718,15 +938,17 @@
     let myTeam = null;
     let myScore = 0;
     let myLives = 3;
+    let maxLives = 3;
     let myStreak = 0;
     let lastChoice = null;
     let studentTimerIv = null;
+    let freezeTimerIv = null;
 
     let prevLives = 3;
 
     function livesHtml(n, animate) {
       let html = '';
-      for (let i = 0; i < 3; i++) {
+      for (let i = 0; i < maxLives; i++) {
         const alive = i < n;
         const justLost = animate && i >= n && i < prevLives;
         html += `<span class="heart${justLost ? ' lost' : ''}">${alive ? '❤️' : '🖤'}</span> `;
@@ -736,7 +958,7 @@
 
     function livesStr(n) {
       return Array(Math.max(0, n)).fill('❤️').join(' ') +
-             (n < 3 ? ' ' + Array(3 - Math.max(0, n)).fill('🖤').join(' ') : '');
+             (n < maxLives ? ' ' + Array(maxLives - Math.max(0, n)).fill('🖤').join(' ') : '');
     }
 
     document.getElementById('joinBtn').addEventListener('click', () => {
@@ -758,8 +980,10 @@
           myName = msg.name;
           myEmoji = msg.emoji || '';
           myLives = msg.lives;
+          maxLives = msg.lives;
           myTeam = msg.team || null;
           document.getElementById('lobbyAvatar').textContent = myEmoji;
+          document.getElementById('lobbyLives').textContent = livesStr(myLives);
           updateTeamBadges();
           buildLobbyPicker();
           show('lobby');
@@ -827,6 +1051,7 @@
           if (myStreak >= 2) {
             badge.textContent = `🔥 ${myStreak} streak!`;
             badge.classList.remove('hidden');
+            if (myStreak >= 3) sfxStreak();
           } else {
             badge.classList.add('hidden');
           }
@@ -834,11 +1059,30 @@
           // Power-up badge
           const puBadge = document.getElementById('powerUpBadge');
           if (msg.powerUp) {
-            puBadge.textContent = msg.powerUp === 'shield' ? '🛡️ Shield Active' : '⚡ 2X Points';
+            const puLabels = { shield: '🛡️ Shield Active', double: '⚡ 2X Points', freeze: '❄️ Freeze Ready' };
+            puBadge.textContent = puLabels[msg.powerUp] || msg.powerUp;
             puBadge.className = 'power-up-active ' + msg.powerUp;
           } else {
             puBadge.className = 'power-up-active hidden';
           }
+
+          // Wager round
+          const wBanner = document.getElementById('wagerBanner');
+          const wRow = document.getElementById('wagerRow');
+          if (msg.wager) {
+            sfxWager();
+            wBanner.classList.remove('hidden');
+            wRow.classList.remove('hidden');
+            document.getElementById('wagerInput').max = msg.score || 0;
+            document.getElementById('wagerInput').value = Math.min(500, msg.score || 0);
+          } else {
+            wBanner.classList.add('hidden');
+            wRow.classList.add('hidden');
+          }
+
+          // Reset urgency visuals
+          document.getElementById('urgentVignette').classList.remove('active');
+          document.getElementById('game').classList.remove('urgent-screen');
 
           // Student timer bar
           clearInterval(studentTimerIv);
@@ -853,8 +1097,13 @@
             timerBar.style.width = pct + '%';
             if (pct < 25) timerBar.classList.add('urgent');
             const stRemaining = timeLimit - stElapsed;
-            if (stRemaining <= 5000 && stRemaining > 0 && stElapsed % 1000 < 100) sfxTick();
+            if (stRemaining <= 5000 && stRemaining > 0 && stElapsed % 1000 < 100) sfxTickEscalating(stRemaining);
             if (stRemaining <= 5000) intensifyAmbient();
+            // Visual urgency in last 3 seconds
+            if (stRemaining <= 3000 && stRemaining > 0) {
+              document.getElementById('urgentVignette').classList.add('active');
+              document.getElementById('game').classList.add('urgent-screen');
+            }
             if (stElapsed >= timeLimit) clearInterval(studentTimerIv);
           }, 100);
 
@@ -868,12 +1117,16 @@
             btn.textContent = c;
             btn.addEventListener('click', () => {
               lastChoice = c;
-              document.querySelectorAll('.choice-btn').forEach(b => {
+              document.querySelectorAll('#choices .choice-btn').forEach(b => {
                 b.classList.remove('selected');
                 b.disabled = true;
               });
               btn.classList.add('selected');
-              ws.send(JSON.stringify({ type: 'answer', choice: c }));
+              const payload = { type: 'answer', choice: c };
+              // Include wager if wager round
+              const wagerVal = parseInt(document.getElementById('wagerInput').value) || 0;
+              if (msg.wager) payload.wager = wagerVal;
+              ws.send(JSON.stringify(payload));
             });
             choicesDiv.appendChild(btn);
           });
@@ -884,6 +1137,8 @@
         case 'reveal': {
           clearInterval(studentTimerIv);
           stopAmbient();
+          document.getElementById('urgentVignette').classList.remove('active');
+          document.getElementById('game').classList.remove('urgent-screen');
           const oldLives = myLives;
           myLives = msg.lives;
           myScore = msg.score;
@@ -897,13 +1152,13 @@
           // Flash the screen
           if (msg.shieldUsed) {
             flash('correct');
-            sfxCorrect();
+            sfxRevealVariant();
           } else if (!lastChoice) {
             flash('timeout');
             sfxTimeout();
           } else if (isCorrect) {
             flash('correct');
-            sfxCorrect();
+            sfxRevealVariant();
             fireConfetti();
           } else {
             flash('wrong');
@@ -954,10 +1209,28 @@
           // Power-up notification
           const puNotif = document.getElementById('powerUpNotif');
           if (msg.newPowerUp) {
-            puNotif.textContent = msg.newPowerUp === 'shield' ? '🛡️ You earned a Shield!' : '⚡ You earned Double Points!';
+            const puNames = { shield: '🛡️ You earned a Shield!', double: '⚡ You earned Double Points!', freeze: '❄️ You earned Freeze!' };
+            puNotif.textContent = puNames[msg.newPowerUp] || msg.newPowerUp;
             puNotif.classList.remove('hidden');
+            sfxPowerUp();
           } else {
             puNotif.classList.add('hidden');
+          }
+
+          // Steal notification
+          const stealEl = document.getElementById('stealNotif');
+          if (msg.steal) {
+            sfxSteal();
+            if (msg.steal.to === myName) {
+              stealEl.textContent = `⚡ You stole ${msg.steal.amount} pts from ${msg.steal.fromEmoji || ''} ${msg.steal.from}!`;
+            } else if (msg.steal.from === myName) {
+              stealEl.textContent = `💸 ${msg.steal.toEmoji || ''} ${msg.steal.to} stole ${msg.steal.amount} pts from you!`;
+            } else {
+              stealEl.textContent = `⚡ ${msg.steal.toEmoji || ''} ${msg.steal.to} stole ${msg.steal.amount} pts from ${msg.steal.fromEmoji || ''} ${msg.steal.from}`;
+            }
+            stealEl.classList.remove('hidden');
+          } else {
+            stealEl.classList.add('hidden');
           }
 
           if (!msg.alive) {
@@ -972,6 +1245,33 @@
         case 'finished': {
           stopAmbient();
           sfxFinished();
+
+          // My stats
+          const me = msg.rankings.find(r => r.name === myName);
+          const statsDiv = document.getElementById('myStats');
+          if (me && me.stats) {
+            const s = me.stats;
+            statsDiv.innerHTML = `
+              <div class="stat-card"><div class="stat-value">${s.accuracy}%</div><div class="stat-label">Accuracy</div></div>
+              <div class="stat-card"><div class="stat-value">${s.avgTime}ms</div><div class="stat-label">Avg Time</div></div>
+              <div class="stat-card"><div class="stat-value">${s.bestStreak}</div><div class="stat-label">Best Streak</div></div>
+              <div class="stat-card"><div class="stat-value">${s.correct}/${s.correct + s.wrong}</div><div class="stat-label">Correct</div></div>`;
+          } else { statsDiv.innerHTML = ''; }
+
+          // Awards
+          const awardsDiv = document.getElementById('awardsSection');
+          if (msg.awards && msg.awards.length > 0) {
+            awardsDiv.innerHTML = '<h3 style="margin:0.5rem 0;">🏅 Awards</h3>' +
+              msg.awards.map(a => `<div class="award-card">
+                <span class="award-icon">${a.icon}</span>
+                <div class="award-info">
+                  <div class="award-title">${escapeHtml(a.title)}</div>
+                  <div class="award-name">${a.emoji || ''} ${escapeHtml(a.name)} — ${escapeHtml(a.detail)}</div>
+                </div>
+              </div>`).join('');
+          } else { awardsDiv.innerHTML = ''; }
+
+          // Rankings
           const list = document.getElementById('rankList');
           list.innerHTML = '';
           msg.rankings.forEach((r, i) => {
@@ -1000,6 +1300,66 @@
           break;
         }
 
+        case 'spectate-question': {
+          const sc = document.getElementById('spectatorContent');
+          sc.innerHTML = `<p class="question-text">${escapeHtml(msg.question)}</p>
+            <p class="subtitle">Q${msg.index + 1} of ${msg.total}${msg.wager ? ' — 🎰 Wager Round' : ''}</p>
+            <div class="choices">${msg.choices.map(c => `<button class="choice-btn" disabled>${escapeHtml(c)}</button>`).join('')}</div>`;
+          break;
+        }
+
+        case 'spectate-reveal': {
+          const sc2 = document.getElementById('spectatorContent');
+          const mini = msg.players.slice(0, 5).map((r, i) =>
+            `<li>${i + 1}. ${r.emoji || ''} ${escapeHtml(r.name)} — ${r.score} pts</li>`
+          ).join('');
+          sc2.innerHTML = `<p class="subtitle">Answer: <strong>${escapeHtml(msg.answer)}</strong></p>
+            <ol style="text-align:left;max-width:300px;margin:0.5rem auto;">${mini}</ol>`;
+          break;
+        }
+
+        case 'revenge-start': {
+          if (myLives > 0) break; // only eliminated players participate
+          sfxRevenge();
+          const rqText = document.getElementById('revengeQText');
+          rqText.textContent = msg.question;
+          const rChoices = document.getElementById('revengeChoices');
+          rChoices.innerHTML = '';
+          msg.choices.forEach(c => {
+            const btn = document.createElement('button');
+            btn.className = 'choice-btn';
+            btn.textContent = c;
+            btn.onclick = () => {
+              rChoices.querySelectorAll('.choice-btn').forEach(b => b.disabled = true);
+              ws.send(JSON.stringify({ type: 'revenge-answer', choice: c }));
+            };
+            rChoices.appendChild(btn);
+          });
+          show('revenge');
+          break;
+        }
+
+        case 'revenge-result': {
+          const rc = document.getElementById('revengeChoices');
+          rc.innerHTML = '';
+          if (msg.revived) {
+            myLives = 1;
+            document.getElementById('revengeQText').textContent = '🎉 You have been REVIVED!';
+          } else {
+            document.getElementById('revengeQText').textContent = `❌ Wrong! Answer was: ${msg.answer}`;
+          }
+          break;
+        }
+
+        case 'revenge-end': {
+          if (myLives > 0) {
+            // Revived player goes back to active game
+          } else {
+            show('eliminated');
+          }
+          break;
+        }
+
         case 'paused':
           clearInterval(studentTimerIv);
           document.getElementById('pausedOverlay').classList.remove('hidden');
@@ -1018,15 +1378,52 @@
         case 'restarted':
           stopAmbient();
           myScore = 0;
-          myLives = 3;
+          myLives = maxLives;
           myStreak = 0;
-          prevLives = 3;
+          prevLives = maxLives;
           lastChoice = null;
           clearInterval(studentTimerIv);
+          clearInterval(freezeTimerIv);
+          document.getElementById('freezeOverlay').classList.add('hidden');
           document.getElementById('lobbyAvatar').textContent = myEmoji;
+          document.getElementById('lobbyLives').textContent = livesStr(myLives);
           document.getElementById('pausedOverlay').classList.add('hidden');
           show('lobby');
           break;
+
+        case 'frozen': {
+          sfxFreeze();
+          const fo = document.getElementById('freezeOverlay');
+          const fc = document.getElementById('freezeCountdown');
+          fo.classList.remove('hidden');
+          // Disable choices while frozen
+          document.querySelectorAll('#choices .choice-btn').forEach(b => b.disabled = true);
+          let freezeLeft = msg.duration || 3;
+          fc.textContent = freezeLeft;
+          clearInterval(freezeTimerIv);
+          freezeTimerIv = setInterval(() => {
+            freezeLeft--;
+            fc.textContent = freezeLeft;
+            if (freezeLeft <= 0) {
+              clearInterval(freezeTimerIv);
+              fo.classList.add('hidden');
+              // Re-enable choices that weren't already selected
+              document.querySelectorAll('#choices .choice-btn').forEach(b => {
+                if (!b.classList.contains('selected')) b.disabled = false;
+              });
+            }
+          }, 1000);
+          break;
+        }
+
+        case 'freeze-used': {
+          // Brief notification that your freeze hit someone
+          const fuDiv = document.getElementById('stealNotif');
+          fuDiv.textContent = `❄️ You froze ${msg.target}!`;
+          fuDiv.classList.remove('hidden');
+          setTimeout(() => fuDiv.classList.add('hidden'), 3000);
+          break;
+        }
       }
     });
 
