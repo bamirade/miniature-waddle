@@ -345,6 +345,89 @@
     .rank-list li:nth-child(4) { animation-delay: 0.4s; }
     .rank-list li:nth-child(5) { animation-delay: 0.5s; }
     .rank-list li:nth-child(n+6) { animation-delay: 0.6s; }
+
+    /* Power-up badge */
+    .power-up-active {
+      display: inline-block;
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-weight: 700;
+      font-size: 0.85rem;
+      margin-bottom: 10px;
+      animation: powerUpPulse 1.5s ease infinite;
+    }
+    .power-up-active.hidden { display: none !important; }
+    .power-up-active.shield { background: linear-gradient(135deg, #00bcd4, #0097a7); color: #fff; }
+    .power-up-active.double { background: linear-gradient(135deg, #ffd700, #ff9800); color: #1a1a2e; }
+    @keyframes powerUpPulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.05); box-shadow: 0 0 12px rgba(255, 215, 0, 0.3); }
+    }
+
+    /* Power-up notification */
+    .power-up-notif {
+      background: linear-gradient(135deg, #6c63ff, #00bcd4);
+      color: #fff;
+      padding: 10px 18px;
+      border-radius: 12px;
+      font-weight: 700;
+      font-size: 0.95rem;
+      margin-top: 10px;
+      animation: powerUpReveal 0.5s ease;
+    }
+    .power-up-notif.hidden { display: none !important; }
+    @keyframes powerUpReveal {
+      from { transform: scale(0.5) translateY(10px); opacity: 0; }
+      to { transform: scale(1) translateY(0); opacity: 1; }
+    }
+
+    /* Reaction bar */
+    .reaction-bar {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      margin-top: 16px;
+    }
+    .reaction-btn {
+      font-size: 1.5rem;
+      background: #1a1a2e;
+      border: 2px solid #333;
+      border-radius: 50%;
+      width: 50px;
+      height: 50px;
+      cursor: pointer;
+      transition: transform 0.15s, border-color 0.15s;
+    }
+    .reaction-btn:hover { border-color: #6c63ff; transform: scale(1.15); }
+    .reaction-btn:active { transform: scale(0.9); }
+    .reaction-btn.sent { border-color: #4caf50; opacity: 0.5; pointer-events: none; }
+
+    /* Intermission screen */
+    #intermission h2 { color: #fff; margin-bottom: 12px; }
+    .intermission-progress {
+      color: #6c63ff;
+      font-weight: 700;
+      font-size: 1.1rem;
+      margin-bottom: 16px;
+    }
+    .intermission-rank {
+      font-size: 1.3rem;
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 12px;
+    }
+    .intermission-rank strong { color: #6c63ff; font-size: 1.6rem; }
+    .intermission-streak {
+      color: #ff9800;
+      font-weight: 600;
+      margin-bottom: 16px;
+    }
+    .intermission-msg {
+      color: #888;
+      font-size: 0.9rem;
+      margin-top: 12px;
+      animation: pulse 2s infinite;
+    }
   </style>
 </head>
 <body>
@@ -386,6 +469,7 @@
       </div>
       <div class="lives-display" id="gameLives">❤️ ❤️ ❤️</div>
       <div class="streak-badge hidden" id="streakBadge"></div>
+      <div class="power-up-active hidden" id="powerUpBadge"></div>
       <div class="student-timer"><div class="student-timer-inner" id="studentTimer"></div></div>
       <p class="question-num" id="qNum"></p>
       <p class="question-text" id="qText"></p>
@@ -399,6 +483,22 @@
       <p id="pointsEarned" class="points-earned"></p>
       <div class="lives-display" id="revealLives"></div>
       <div id="rankDisplay" class="rank-display"></div>
+      <div id="powerUpNotif" class="power-up-notif hidden"></div>
+      <div class="reaction-bar">
+        <button class="reaction-btn" data-emoji="\uD83D\uDE31">😱</button>
+        <button class="reaction-btn" data-emoji="\uD83C\uDF89">🎉</button>
+        <button class="reaction-btn" data-emoji="\uD83D\uDE24">😤</button>
+        <button class="reaction-btn" data-emoji="\uD83E\uDD2F">🤯</button>
+      </div>
+    </div>
+
+    <!-- Intermission -->
+    <div id="intermission" class="screen hidden">
+      <h2>⏸️ Halftime</h2>
+      <p class="intermission-progress" id="intermProgress"></p>
+      <div class="intermission-rank" id="intermRank"></div>
+      <div class="intermission-streak" id="intermStreak"></div>
+      <p class="intermission-msg">Next round starting soon...</p>
     </div>
 
     <!-- Eliminated -->
@@ -418,7 +518,7 @@
   <script>
     const ws = new WebSocket(`ws://${location.host}`);
 
-    const screens = ['register', 'lobby', 'starting', 'game', 'reveal', 'eliminated', 'finished'];
+    const screens = ['register', 'lobby', 'starting', 'game', 'reveal', 'intermission', 'eliminated', 'finished'];
     function show(id) {
       screens.forEach(s => {
         const el = document.getElementById(s);
@@ -487,6 +587,43 @@
       setTimeout(() => playTone(659, 'square', 0.15, 0.2), 150);
       setTimeout(() => playTone(784, 'square', 0.15, 0.2), 300);
       setTimeout(() => playTone(1047, 'square', 0.4, 0.25), 450);
+    }
+
+    // ── Ambient music during questions ─────────────────
+    let ambientOsc = null, ambientGain = null, ambientLfo = null;
+    let ambientIntensified = false;
+    function startAmbient() {
+      if (!audioCtx) return;
+      stopAmbient();
+      ambientIntensified = false;
+      ambientOsc = audioCtx.createOscillator();
+      ambientGain = audioCtx.createGain();
+      ambientLfo = audioCtx.createOscillator();
+      const lfoGain = audioCtx.createGain();
+      ambientOsc.type = 'sine';
+      ambientOsc.frequency.value = 80;
+      ambientGain.gain.value = 0.06;
+      ambientLfo.type = 'sine';
+      ambientLfo.frequency.value = 2;
+      lfoGain.gain.value = 0.04;
+      ambientLfo.connect(lfoGain);
+      lfoGain.connect(ambientGain.gain);
+      ambientOsc.connect(ambientGain);
+      ambientGain.connect(audioCtx.destination);
+      ambientOsc.start();
+      ambientLfo.start();
+    }
+    function stopAmbient() {
+      try { if (ambientOsc) ambientOsc.stop(); } catch(e) {}
+      try { if (ambientLfo) ambientLfo.stop(); } catch(e) {}
+      ambientOsc = null; ambientLfo = null; ambientGain = null;
+    }
+    function intensifyAmbient() {
+      if (ambientIntensified || !ambientOsc || !audioCtx) return;
+      ambientIntensified = true;
+      const t = audioCtx.currentTime;
+      ambientOsc.frequency.linearRampToValueAtTime(120, t + 0.5);
+      ambientGain.gain.linearRampToValueAtTime(0.12, t + 0.5);
     }
 
     let myName = '';
@@ -579,6 +716,15 @@
             badge.classList.add('hidden');
           }
 
+          // Power-up badge
+          const puBadge = document.getElementById('powerUpBadge');
+          if (msg.powerUp) {
+            puBadge.textContent = msg.powerUp === 'shield' ? '🛡️ Shield Active' : '⚡ 2X Points';
+            puBadge.className = 'power-up-active ' + msg.powerUp;
+          } else {
+            puBadge.className = 'power-up-active hidden';
+          }
+
           // Student timer bar
           clearInterval(studentTimerIv);
           const timeLimit = (msg.timeLimit || 15) * 1000;
@@ -593,6 +739,7 @@
             if (pct < 25) timerBar.classList.add('urgent');
             const stRemaining = timeLimit - stElapsed;
             if (stRemaining <= 5000 && stRemaining > 0 && stElapsed % 1000 < 100) sfxTick();
+            if (stRemaining <= 5000) intensifyAmbient();
             if (stElapsed >= timeLimit) clearInterval(studentTimerIv);
           }, 100);
 
@@ -616,10 +763,12 @@
             choicesDiv.appendChild(btn);
           });
           show('game');
+          startAmbient();
           break;
 
         case 'reveal': {
           clearInterval(studentTimerIv);
+          stopAmbient();
           const oldLives = myLives;
           myLives = msg.lives;
           myScore = msg.score;
@@ -627,8 +776,14 @@
           const isCorrect = lastChoice === msg.answer;
           const resultEl = document.getElementById('revealResult');
 
+          // Reset reaction buttons
+          document.querySelectorAll('.reaction-btn').forEach(b => b.classList.remove('sent'));
+
           // Flash the screen
-          if (!lastChoice) {
+          if (msg.shieldUsed) {
+            flash('correct');
+            sfxCorrect();
+          } else if (!lastChoice) {
             flash('timeout');
             sfxTimeout();
           } else if (isCorrect) {
@@ -640,19 +795,24 @@
             sfxWrong();
           }
 
-          resultEl.textContent = lastChoice ? (isCorrect ? '✓ Correct!' : '✗ Wrong!') : '⏱ Time\u0027s up!';
-          resultEl.className = 'reveal-result ' + (lastChoice ? (isCorrect ? 'correct' : 'wrong') : 'timeout');
+          if (msg.shieldUsed) {
+            resultEl.textContent = '🛡️ Shield saved you!';
+            resultEl.className = 'reveal-result correct';
+          } else {
+            resultEl.textContent = lastChoice ? (isCorrect ? '✓ Correct!' : '✗ Wrong!') : '⏱ Time\u0027s up!';
+            resultEl.className = 'reveal-result ' + (lastChoice ? (isCorrect ? 'correct' : 'wrong') : 'timeout');
+          }
           document.getElementById('revealAnswer').textContent = msg.answer;
 
           // Points earned display
           const ptsEl = document.getElementById('pointsEarned');
           const pts = msg.pointsEarned || 0;
           if (isCorrect && pts > 0) {
-            ptsEl.textContent = `+${pts} points` + (myStreak >= 3 ? ` (${myStreak}x streak!)` : '');
+            ptsEl.textContent = `+${pts} points` + (msg.wasDouble ? ' (2X!)' : myStreak >= 3 ? ` (${myStreak}x streak!)` : '');
             ptsEl.className = 'points-earned';
           } else {
-            ptsEl.textContent = lastChoice ? 'No points' : 'No points (timed out)';
-            ptsEl.className = 'points-earned zero';
+            ptsEl.textContent = msg.shieldUsed ? 'Shield absorbed!' : (lastChoice ? 'No points' : 'No points (timed out)');
+            ptsEl.className = 'points-earned' + (msg.shieldUsed ? '' : ' zero');
           }
 
           // Animate lives with heart-break if lost
@@ -676,6 +836,15 @@
             rankEl.innerHTML = '';
           }
 
+          // Power-up notification
+          const puNotif = document.getElementById('powerUpNotif');
+          if (msg.newPowerUp) {
+            puNotif.textContent = msg.newPowerUp === 'shield' ? '🛡️ You earned a Shield!' : '⚡ You earned Double Points!';
+            puNotif.classList.remove('hidden');
+          } else {
+            puNotif.classList.add('hidden');
+          }
+
           if (!msg.alive) {
             sfxEliminated();
             show('eliminated');
@@ -686,6 +855,7 @@
         }
 
         case 'finished': {
+          stopAmbient();
           sfxFinished();
           const list = document.getElementById('rankList');
           list.innerHTML = '';
@@ -699,7 +869,24 @@
           break;
         }
 
+        case 'intermission': {
+          stopAmbient();
+          const myRank = msg.rankings.findIndex(r => r.name === myName) + 1;
+          document.getElementById('intermProgress').textContent =
+            `${msg.questionsCompleted} of ${msg.questionsTotal} questions completed`;
+          document.getElementById('intermRank').innerHTML = myRank
+            ? `Your rank: <strong>#${myRank}</strong> of ${msg.rankings.length}`
+            : '';
+          const sl = msg.streakLeader;
+          document.getElementById('intermStreak').textContent = sl
+            ? `🔥 Streak leader: ${sl.name} (${sl.streak} in a row!)`
+            : '';
+          show('intermission');
+          break;
+        }
+
         case 'restarted':
+          stopAmbient();
           myScore = 0;
           myLives = 3;
           myStreak = 0;
@@ -763,6 +950,14 @@
       }
       draw();
     }
+
+    // ── Reaction emojis ──────────────────────────────────
+    document.querySelectorAll('.reaction-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        ws.send(JSON.stringify({ type: 'reaction', emoji: btn.dataset.emoji }));
+        btn.classList.add('sent');
+      });
+    });
   </script>
 </body>
 </html>

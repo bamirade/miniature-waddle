@@ -284,11 +284,70 @@
     .full-rankings li:first-child { border: 1px solid #ffd700; }
     .rank-pos { color: #6c63ff; font-weight: 700; margin-right: 12px; }
 
+    /* Fastest badge */
+    .fastest-badge {
+      display: inline-block;
+      background: linear-gradient(135deg, #ffd700, #ff9800);
+      color: #1a1a2e;
+      padding: 8px 20px;
+      border-radius: 20px;
+      font-weight: 700;
+      font-size: 1rem;
+      margin-bottom: 16px;
+      animation: fastestPop 0.5s ease;
+    }
+    .fastest-badge.hidden { display: none !important; }
+    @keyframes fastestPop {
+      0% { transform: scale(0); opacity: 0; }
+      60% { transform: scale(1.1); opacity: 1; }
+      100% { transform: scale(1); }
+    }
+
+    /* Floating emojis */
+    .emoji-float-container {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 150;
+      overflow: hidden;
+    }
+    .emoji-float {
+      position: absolute;
+      font-size: 2rem;
+      animation: emojiRise 2.5s ease-out forwards;
+      opacity: 0;
+    }
+    @keyframes emojiRise {
+      0% { opacity: 1; transform: translateY(0) scale(0.5); }
+      20% { opacity: 1; transform: translateY(-30px) scale(1.2); }
+      100% { opacity: 0; transform: translateY(-250px) scale(0.8); }
+    }
+
+    /* Intermission */
+    .intermission-badge {
+      color: #ff9800;
+      font-weight: 700;
+      font-size: 1.1rem;
+      margin: 16px 0;
+    }
+    .intermission-timer {
+      color: #888;
+      font-size: 0.95rem;
+      margin-top: 16px;
+      animation: hostPulse 2s infinite;
+    }
+    @keyframes hostPulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
     .error-msg { color: #f44336; margin-top: 12px; }
   </style>
 </head>
 <body>
   <div class="container">
+
+    <div id="emojiFloat" class="emoji-float-container"></div>
 
     <!-- Lobby -->
     <div id="lobby-screen" class="panel">
@@ -314,7 +373,17 @@
     <div id="reveal-screen" class="panel hidden">
       <h2>Answer Revealed</h2>
       <p class="correct-answer">✓ <span id="correctAnswer"></span></p>
+      <div id="fastestBadge" class="fastest-badge hidden"></div>
       <div class="scoreboard" id="scoreboard"></div>
+    </div>
+
+    <!-- Intermission -->
+    <div id="intermission-screen" class="panel hidden">
+      <h1>⏸️ Halftime</h1>
+      <p class="subtitle" id="hostIntermProgress"></p>
+      <div class="scoreboard" id="intermScoreboard"></div>
+      <div class="intermission-badge" id="hostIntermStreak"></div>
+      <p class="intermission-timer">Continuing soon...</p>
     </div>
 
     <!-- Finished -->
@@ -330,7 +399,7 @@
   <script>
     const ws = new WebSocket(`ws://${location.host}`);
 
-    const panels = ['lobby-screen', 'question-screen', 'reveal-screen', 'finished-screen'];
+    const panels = ['lobby-screen', 'question-screen', 'reveal-screen', 'intermission-screen', 'finished-screen'];
     function show(id) {
       panels.forEach(p => {
         const el = document.getElementById(p);
@@ -411,6 +480,43 @@
       setTimeout(() => playTone(1047, 'square', 0.4, 0.25), 450);
     }
 
+    // ── Ambient music during questions ─────────────────
+    let ambientOsc = null, ambientGain = null, ambientLfo = null;
+    let ambientIntensified = false;
+    function startAmbient() {
+      if (!audioCtx) return;
+      stopAmbient();
+      ambientIntensified = false;
+      ambientOsc = audioCtx.createOscillator();
+      ambientGain = audioCtx.createGain();
+      ambientLfo = audioCtx.createOscillator();
+      const lfoGain = audioCtx.createGain();
+      ambientOsc.type = 'sine';
+      ambientOsc.frequency.value = 80;
+      ambientGain.gain.value = 0.06;
+      ambientLfo.type = 'sine';
+      ambientLfo.frequency.value = 2;
+      lfoGain.gain.value = 0.04;
+      ambientLfo.connect(lfoGain);
+      lfoGain.connect(ambientGain.gain);
+      ambientOsc.connect(ambientGain);
+      ambientGain.connect(audioCtx.destination);
+      ambientOsc.start();
+      ambientLfo.start();
+    }
+    function stopAmbient() {
+      try { if (ambientOsc) ambientOsc.stop(); } catch(e) {}
+      try { if (ambientLfo) ambientLfo.stop(); } catch(e) {}
+      ambientOsc = null; ambientLfo = null; ambientGain = null;
+    }
+    function intensifyAmbient() {
+      if (ambientIntensified || !ambientOsc || !audioCtx) return;
+      ambientIntensified = true;
+      const t = audioCtx.currentTime;
+      ambientOsc.frequency.linearRampToValueAtTime(120, t + 0.5);
+      ambientGain.gain.linearRampToValueAtTime(0.12, t + 0.5);
+    }
+
     ws.addEventListener('message', (e) => {
       const msg = JSON.parse(e.data);
 
@@ -451,6 +557,7 @@
         case 'question': {
           show('question-screen');
           sfxQuestion();
+          startAmbient();
           document.getElementById('hostQNum').textContent = `Question ${msg.index + 1} of ${msg.total}`;
           document.getElementById('hostQText').textContent = msg.question;
           const choices = document.getElementById('hostChoices');
@@ -477,6 +584,7 @@
             bar.style.width = pct + '%';
             const hostRemaining = timeMs - elapsed;
             if (hostRemaining <= 5000 && hostRemaining > 0 && elapsed % 1000 < 100) sfxTick();
+            if (hostRemaining <= 5000) intensifyAmbient();
             if (elapsed >= timeMs) clearInterval(timerInterval);
           }, 100);
           break;
@@ -489,9 +597,18 @@
 
         case 'reveal': {
           clearInterval(timerInterval);
+          stopAmbient();
           sfxReveal();
           show('reveal-screen');
           document.getElementById('correctAnswer').textContent = msg.answer;
+          // Fastest badge
+          const fb = document.getElementById('fastestBadge');
+          if (msg.fastest) {
+            fb.textContent = `⚡ Fastest: ${msg.fastest}`;
+            fb.classList.remove('hidden');
+          } else {
+            fb.classList.add('hidden');
+          }
           if (msg.aliveCount !== undefined) {
             document.getElementById('aliveCount').innerHTML =
               `<strong>${msg.aliveCount}</strong> players still alive`;
@@ -502,6 +619,7 @@
 
         case 'finished': {
           clearInterval(timerInterval);
+          stopAmbient();
           sfxFinished();
           show('finished-screen');
           const podium = document.getElementById('podium');
@@ -532,6 +650,43 @@
           prevRanks = {};
           show('lobby-screen');
           break;
+
+        case 'intermission': {
+          clearInterval(timerInterval);
+          stopAmbient();
+          show('intermission-screen');
+          document.getElementById('hostIntermProgress').textContent =
+            `${msg.questionsCompleted} of ${msg.questionsTotal} questions completed`;
+          const intermSb = document.getElementById('intermScoreboard');
+          intermSb.innerHTML = '';
+          msg.rankings.forEach((r, i) => {
+            const row = document.createElement('div');
+            row.className = 'scoreboard-row' + (r.alive ? '' : ' dead');
+            row.style.animation = `rowSlideIn 0.3s ease ${i * 0.06}s backwards`;
+            const streakHtml = r.streak >= 2 ? `<span class="sb-streak">🔥${r.streak}</span>` : '';
+            row.innerHTML = `<span class="sb-name"><span class="sb-rank-num">#${i + 1}</span>${escapeHtml(r.name)}${streakHtml}</span>
+                             <span class="sb-lives">${livesStr(r.lives)}</span>
+                             <span class="sb-score">${r.score} pts</span>`;
+            intermSb.appendChild(row);
+          });
+          const sl = msg.streakLeader;
+          document.getElementById('hostIntermStreak').textContent = sl
+            ? `🔥 Streak Leader: ${sl.name} (${sl.streak} in a row!)`
+            : '';
+          break;
+        }
+
+        case 'reaction': {
+          const container = document.getElementById('emojiFloat');
+          const el = document.createElement('div');
+          el.className = 'emoji-float';
+          el.textContent = msg.emoji;
+          el.style.left = (20 + Math.random() * 60) + '%';
+          el.style.bottom = '10%';
+          container.appendChild(el);
+          setTimeout(() => el.remove(), 2500);
+          break;
+        }
       }
     });
 
@@ -608,8 +763,9 @@
       }
 
       const streakHtml = p.streak >= 2 ? `<span class="sb-streak">🔥${p.streak}</span>` : '';
+      const puHtml = p.powerUp === 'shield' ? ' 🛡️' : p.powerUp === 'double' ? ' ⚡' : '';
 
-      row.innerHTML = `<span class="sb-name">${rankNum}${changeHtml}${escapeHtml(p.name)}${streakHtml}</span>
+      row.innerHTML = `<span class="sb-name">${rankNum}${changeHtml}${escapeHtml(p.name)}${puHtml}${streakHtml}</span>
                        <span class="sb-lives">${livesStr(p.lives)}</span>
                        <span class="sb-score">${p.score} pts</span>`;
       return row;
