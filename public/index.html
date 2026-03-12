@@ -946,8 +946,45 @@
     let myStreak = 0;
     let lastChoice = null;
     let studentTimerIv = null;
+    let studentTimeLimit = 0; // ms
+    let studentTimeElapsed = 0; // ms
     let freezeTimerIv = null;
     let isFrozen = false;
+
+    function startStudentTimer(totalMs, startElapsedMs = 0) {
+      if (!totalMs || totalMs <= 0) return;
+      clearInterval(studentTimerIv);
+      studentTimeLimit = totalMs;
+      studentTimeElapsed = Math.max(0, startElapsedMs);
+      const timerBar = document.getElementById('studentTimer');
+      if (!timerBar) return;
+      // initialize
+      const pctInit = Math.max(0, 100 - (studentTimeElapsed / studentTimeLimit) * 100);
+      timerBar.style.width = pctInit + '%';
+      timerBar.classList.remove('urgent');
+      document.getElementById('urgentVignette').classList.remove('active');
+      document.getElementById('game').classList.remove('urgent-screen');
+
+      studentTimerIv = setInterval(() => {
+        studentTimeElapsed += 100;
+        const pct = Math.max(0, 100 - (studentTimeElapsed / studentTimeLimit) * 100);
+        timerBar.style.width = pct + '%';
+        if (pct < 25) timerBar.classList.add('urgent'); else timerBar.classList.remove('urgent');
+        const stRemaining = Math.max(0, studentTimeLimit - studentTimeElapsed);
+        if (stRemaining <= 5000 && stRemaining > 0 && (studentTimeElapsed % 1000) < 100) sfxTickEscalating(stRemaining);
+        if (stRemaining <= 5000) intensifyAmbient();
+        if (stRemaining <= 3000 && stRemaining > 0) {
+          document.getElementById('urgentVignette').classList.add('active');
+          document.getElementById('game').classList.add('urgent-screen');
+        } else {
+          document.getElementById('urgentVignette').classList.remove('active');
+          document.getElementById('game').classList.remove('urgent-screen');
+        }
+        if (studentTimeElapsed >= studentTimeLimit) {
+          clearInterval(studentTimerIv);
+        }
+      }, 100);
+    }
 
     let prevLives = 3;
 
@@ -1116,27 +1153,7 @@
           document.getElementById('game').classList.remove('urgent-screen');
 
           // Student timer bar
-          clearInterval(studentTimerIv);
-          const timeLimit = (msg.timeLimit || 15) * 1000;
-          const timerBar = document.getElementById('studentTimer');
-          timerBar.style.width = '100%';
-          timerBar.classList.remove('urgent');
-          let stElapsed = 0;
-          studentTimerIv = setInterval(() => {
-            stElapsed += 100;
-            const pct = Math.max(0, 100 - (stElapsed / timeLimit) * 100);
-            timerBar.style.width = pct + '%';
-            if (pct < 25) timerBar.classList.add('urgent');
-            const stRemaining = timeLimit - stElapsed;
-            if (stRemaining <= 5000 && stRemaining > 0 && stElapsed % 1000 < 100) sfxTickEscalating(stRemaining);
-            if (stRemaining <= 5000) intensifyAmbient();
-            // Visual urgency in last 3 seconds
-            if (stRemaining <= 3000 && stRemaining > 0) {
-              document.getElementById('urgentVignette').classList.add('active');
-              document.getElementById('game').classList.add('urgent-screen');
-            }
-            if (stElapsed >= timeLimit) clearInterval(studentTimerIv);
-          }, 100);
+          startStudentTimer((msg.timeLimit || 15) * 1000, 0);
 
           const choicesDiv = document.getElementById('choices');
           choicesDiv.innerHTML = '';
@@ -1146,6 +1163,8 @@
             const btn = document.createElement('button');
             btn.className = 'choice-btn';
             btn.textContent = c;
+            // If client is currently frozen, newly-created choices should start disabled
+            if (isFrozen) btn.disabled = true;
             btn.addEventListener('click', () => {
               lastChoice = c;
               document.querySelectorAll('#choices .choice-btn').forEach(b => {
@@ -1339,6 +1358,8 @@
           sc.innerHTML = `<p class="question-text">${escapeHtml(msg.question)}</p>
             <p class="subtitle">Q${msg.index + 1} of ${msg.total}${msg.wager ? ' — 🎰 Wager Round' : ''}</p>
             <div class="choices">${msg.choices.map(c => `<button class="choice-btn" disabled>${escapeHtml(c)}</button>`).join('')}</div>`;
+          // Ensure spectator view is visible for eliminated players
+          show('eliminated');
           break;
         }
 
@@ -1349,11 +1370,17 @@
           ).join('');
           sc2.innerHTML = `<p class="subtitle">Answer: <strong>${escapeHtml(msg.answer)}</strong></p>
             <ol style="text-align:left;max-width:300px;margin:0.5rem auto;">${mini}</ol>`;
+          // Make sure eliminated/spectator screen is shown
+          show('eliminated');
           break;
         }
 
         case 'revenge-start': {
-          if (myLives > 0) break; // only eliminated players participate
+          // Determine if this client is eligible to answer: prefer server-sent eliminated list
+          let amEliminated = false;
+          if (Array.isArray(msg.eliminatedNames)) amEliminated = msg.eliminatedNames.includes(myName);
+          else amEliminated = (typeof myLives === 'number' && myLives <= 0);
+          if (!amEliminated) break;
           sfxRevenge();
           const rqText = document.getElementById('revengeQText');
           rqText.textContent = msg.question;
@@ -1401,6 +1428,17 @@
 
         case 'resumed':
           document.getElementById('pausedOverlay').classList.add('hidden');
+          // Restart student timer using server-provided remaining time when available
+          try {
+            const remaining = (typeof msg.remaining === 'number') ? msg.remaining : null;
+            if (remaining !== null && studentTimeLimit > 0) {
+              const startElapsed = Math.max(0, studentTimeLimit - remaining);
+              startStudentTimer(studentTimeLimit, startElapsed);
+            } else if (studentTimeLimit > 0) {
+              // fallback: resume from previously tracked elapsed
+              startStudentTimer(studentTimeLimit, studentTimeElapsed);
+            }
+          } catch (e) { /* ignore */ }
           break;
 
         case 'kicked':
@@ -1419,6 +1457,11 @@
           clearInterval(studentTimerIv);
           clearInterval(freezeTimerIv);
           document.getElementById('freezeOverlay').classList.add('hidden');
+          // Clear frozen flag and ensure wager/choice controls are enabled
+          isFrozen = false;
+          const _wi = document.getElementById('wagerInput'); if (_wi) _wi.disabled = false;
+          const _pb = document.getElementById('placeWagerBtn'); if (_pb) _pb.disabled = false;
+          const _ai = document.getElementById('allInBtn'); if (_ai) _ai.disabled = false;
           document.getElementById('lobbyAvatar').textContent = myEmoji;
           document.getElementById('lobbyLives').textContent = livesStr(myLives);
           document.getElementById('pausedOverlay').classList.add('hidden');

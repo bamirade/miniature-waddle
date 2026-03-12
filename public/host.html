@@ -693,6 +693,8 @@
     }
 
     let timerInterval = null;
+    let hostTimeLimitMs = 0;
+    let hostElapsedMs = 0;
     let prevRanks = {}; // name -> previous rank index (0-based)
     let teamModeOn = false;
     let isPaused = false;
@@ -832,6 +834,26 @@
       setTimeout(() => playTone(330, 'sawtooth', 0.2, 0.2), 150);
       setTimeout(() => playTone(440, 'sawtooth', 0.3, 0.25), 300);
     }
+    function startHostTimer(totalMs, startElapsed = 0) {
+      const bar = document.getElementById('timerBar');
+      if (!bar || !totalMs) return;
+      clearInterval(timerInterval);
+      hostTimeLimitMs = totalMs;
+      hostElapsedMs = Math.max(0, startElapsed || 0);
+      // initialize bar width
+      bar.style.width = Math.max(0, 100 - (hostElapsedMs / hostTimeLimitMs) * 100) + '%';
+      timerInterval = setInterval(() => {
+        hostElapsedMs += 100;
+        const pct = Math.max(0, 100 - (hostElapsedMs / hostTimeLimitMs) * 100);
+        bar.style.width = pct + '%';
+        const hostRemaining = Math.max(0, hostTimeLimitMs - hostElapsedMs);
+        if (hostRemaining <= 5000 && hostRemaining > 0 && hostElapsedMs % 1000 < 100) sfxTickEscalating(hostRemaining);
+        if (hostRemaining <= 5000) intensifyAmbient();
+        if (hostRemaining <= 3000) document.getElementById('hostUrgentVignette').classList.add('active');
+        else document.getElementById('hostUrgentVignette').classList.remove('active');
+        if (hostElapsedMs >= hostTimeLimitMs) clearInterval(timerInterval);
+      }, 100);
+    }
 
     // ── Ambient music during questions ─────────────────
     let ambientOsc = null, ambientGain = null, ambientLfo = null;
@@ -958,20 +980,8 @@
 
           // Timer bar (dynamic time limit)
           const timeMs = (msg.timeLimit || 15) * 1000;
-          const bar = document.getElementById('timerBar');
-          bar.style.width = '100%';
-          let elapsed = 0;
-          clearInterval(timerInterval);
-          timerInterval = setInterval(() => {
-            elapsed += 100;
-            const pct = Math.max(0, 100 - (elapsed / timeMs) * 100);
-            bar.style.width = pct + '%';
-            const hostRemaining = timeMs - elapsed;
-            if (hostRemaining <= 5000 && hostRemaining > 0 && elapsed % 1000 < 100) sfxTickEscalating(hostRemaining);
-            if (hostRemaining <= 5000) intensifyAmbient();
-            if (hostRemaining <= 3000) document.getElementById('hostUrgentVignette').classList.add('active');
-            if (elapsed >= timeMs) clearInterval(timerInterval);
-          }, 100);
+          // Start host timer helper which manages visual bar and sounds
+          startHostTimer(timeMs, 0);
           break;
         }
 
@@ -1107,6 +1117,17 @@
           document.getElementById('hostPausedOverlay').classList.add('hidden');
           document.getElementById('pauseBtn').textContent = '⏸ Pause';
           startAmbient();
+          // Resume visual timer using server-provided remaining time when available
+          if (typeof msg.remaining === 'number') {
+            const remaining = Math.max(0, msg.remaining);
+            if (hostTimeLimitMs > 0) {
+              const startElapsed = Math.max(0, hostTimeLimitMs - remaining);
+              startHostTimer(hostTimeLimitMs, startElapsed);
+            } else {
+              // Fallback: show a full bar for the remaining duration
+              startHostTimer(remaining, 0);
+            }
+          }
           break;
 
         case 'restarted':

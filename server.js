@@ -73,6 +73,7 @@ let teamMode = false;
 let isWagerRound = false;
 let revengeActive = false;
 let activeQuestions = []; // subset of QUESTIONS used for current game
+let currentRevenge = { active: false, question: null, answer: null, choices: null, answers: new Set(), timer: null };
 
 const TEAMS = [
   { name: 'Red', color: '#f44336', icon: '🔴' },
@@ -174,6 +175,10 @@ function sendQuestion() {
           tp.frozen = 3; // frozen for 3 seconds
           sendTo(tp.ws, { type: 'frozen', frozenBy: p.name, duration: 3 });
           sendTo(p.ws, { type: 'freeze-used', target: tp.name });
+          // Schedule server-side unfreeze after duration so server will accept answers again
+          setTimeout(() => {
+            try { tp.frozen = 0; } catch (e) {}
+          }, 3000);
         }
         p.powerUp = null;
       }
@@ -284,6 +289,7 @@ function revealAnswer() {
         answer: q.answer,
         players: list,
         wager: isWagerRound,
+        lives: p.lives,
       });
       return;
     }
@@ -433,9 +439,15 @@ function startRevengeRound() {
   // Pick a random question from remaining pool (don't advance index)
   const remainingQs = activeQuestions.filter((_, i) => i > currentQuestionIdx);
   const rq = remainingQs.length > 0 ? remainingQs[Math.floor(Math.random() * remainingQs.length)] : activeQuestions[Math.floor(Math.random() * activeQuestions.length)];
-  const revengeAnswers = new Set();
-  const revengeStartTime = Date.now();
   const REVENGE_TIME = 10;
+
+  // Initialize global revenge state so main message handler can process answers
+  if (currentRevenge.timer) { clearTimeout(currentRevenge.timer); }
+  currentRevenge.active = true;
+  currentRevenge.question = rq.question;
+  currentRevenge.answer = rq.answer;
+  currentRevenge.choices = rq.choices;
+  currentRevenge.answers = new Set();
 
   // Notify everyone
   broadcast({
@@ -446,65 +458,14 @@ function startRevengeRound() {
     eliminatedNames: eliminated.map(([, p]) => p.name),
   });
 
-  // Alive players just watch; eliminated players get a temp handler
-  const revengeHandler = (raw) => {
-    let rmsg;
-    try { rmsg = JSON.parse(raw); } catch { return; }
-    if (rmsg.type !== 'revenge-answer') return;
-    const entry = eliminated.find(([, p]) => p.ws === ws);
-    if (!entry) return;
-    const [rid] = entry;
-    if (revengeAnswers.has(rid)) return;
-    revengeAnswers.add(rid);
-    // Check answer
-    if (rmsg.choice === rq.answer) {
-      players[rid].alive = true;
-      players[rid].lives = 1;
-      players[rid].streak = 0;
-      sendTo(players[rid].ws, { type: "revenge-result", revived: true });
-    } else {
-      sendTo(players[rid].ws, { type: "revenge-result", revived: false, answer: rq.answer });
-    }
-  };
-
-  // We need per-connection handling. Use a simpler approach: store handlers and clean up
-  const wsHandlers = new Map();
-  eliminated.forEach(([id, p]) => {
-    const handler = (raw) => {
-      let rmsg;
-      try { rmsg = JSON.parse(raw); } catch { return; }
-      if (rmsg.type !== 'revenge-answer') return;
-      if (revengeAnswers.has(id)) return;
-      revengeAnswers.add(id);
-      if (rmsg.choice === rq.answer) {
-        players[id].alive = true;
-        players[id].lives = 1;
-        players[id].streak = 0;
-        sendTo(p.ws, { type: "revenge-result", revived: true });
-      } else {
-        sendTo(p.ws, { type: "revenge-result", revived: false, answer: rq.answer });
-      }
-    };
-    p.ws.on('message', handler);
-    wsHandlers.set(id, handler);
-  });
-
-  // Timer for revenge round
-  setTimeout(() => {
-    // Clean up handlers
-    wsHandlers.forEach((handler, id) => {
-      if (players[id] && players[id].ws) {
-        players[id].ws.removeListener('message', handler);
-      }
-    });
-    // Notify host of revenge results
+  // Timer for revenge round: finalize after REVENGE_TIME seconds
+  currentRevenge.timer = setTimeout(() => {
     const revived = eliminated.filter(([id]) => players[id] && players[id].alive).map(([, p]) => p.name);
-    broadcast({
-      type: "revenge-end",
-      answer: rq.answer,
-      revived,
-    });
+    broadcast({ type: "revenge-end", answer: rq.answer, revived });
     revengeActive = false;
+    currentRevenge.active = false;
+    currentRevenge.answers.clear();
+    currentRevenge.timer = null;
     // Continue game after brief pause
     setTimeout(() => sendQuestion(), 3000);
   }, REVENGE_TIME * 1000);
@@ -606,6 +567,11 @@ wss.on("connection", (ws) => {
         const p = players[playerId];
         if (!p.alive) return;
         if (answersThisRound.has(playerId)) return;
+        // Ignore answers while player is frozen
+        if (p.frozen && p.frozen > 0) {
+          sendTo(ws, { type: 'answer-ignored', reason: 'frozen' });
+          return;
+        }
         answersThisRound.add(playerId);
 
         const q = activeQuestions[currentQuestionIdx];
@@ -707,6 +673,26 @@ wss.on("connection", (ws) => {
         if (aliveIds.every((id) => answersThisRound.has(id))) {
           clearTimeout(questionTimer);
           revealAnswer();
+        }
+        break;
+      }
+
+      case "revenge-answer": {
+        // Eliminated players submit answers during an active revenge round
+        if (!gameRunning || !playerId || !players[playerId]) return;
+        if (!currentRevenge || !currentRevenge.active) return;
+        const rp = players[playerId];
+        // Only eliminated players participate
+        if (rp.alive) return;
+        if (currentRevenge.answers.has(playerId)) return;
+        currentRevenge.answers.add(playerId);
+        if (typeof msg.choice === 'string' && msg.choice === currentRevenge.answer) {
+          rp.alive = true;
+          rp.lives = 1;
+          rp.streak = 0;
+          sendTo(rp.ws, { type: "revenge-result", revived: true });
+        } else {
+          sendTo(rp.ws, { type: "revenge-result", revived: false, answer: currentRevenge.answer });
         }
         break;
       }
