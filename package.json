@@ -1,10 +1,13 @@
 {
   "name": "miniature-waddle",
   "version": "1.0.0",
+  "author": "",
   "description": "Real-time quiz game with host and student views",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "electron": "electron electron/main.js",
+    "build:win": "npx electron-packager . MiniWaddleHost --platform=win32 --arch=x64 --out=dist --overwrite --icon=public/favicon.ico --prune=true --ignore=dist --electron-version=29.0.0"
   },
   "dependencies": {
     "express": "^4.21.0",

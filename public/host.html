@@ -599,6 +599,7 @@
           <label class="toggle-label"><input type="checkbox" id="setRevenge" checked> 💀 Revenge</label>
           <label class="toggle-label"><input type="checkbox" id="setPowerUps" checked> ⚡ Power-ups</label>
           <label class="toggle-label"><input type="checkbox" id="setSteal" checked> 🔥 Steal</label>
+          <label class="toggle-label"><input type="checkbox" id="setEngagement" > 🚀 Engagement Mode</label>
         </div>
       </div>
 
@@ -744,6 +745,7 @@
         enableRevenge: document.getElementById('setRevenge').checked,
         enablePowerUps: document.getElementById('setPowerUps').checked,
         enableSteal: document.getElementById('setSteal').checked,
+        enableEngagement: document.getElementById('setEngagement').checked,
       }));
     }
     ['setTimer', 'setLives', 'setQuestions'].forEach(id =>
@@ -752,6 +754,7 @@
     ['setWager', 'setRevenge', 'setPowerUps', 'setSteal'].forEach(id =>
       document.getElementById(id).addEventListener('change', sendSettings)
     );
+    document.getElementById('setEngagement').addEventListener('change', sendSettings);
 
     function livesStr(n) {
       return Array(Math.max(0, n)).fill('❤️').join('') +
