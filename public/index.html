@@ -1,0 +1,1648 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Quiz Game</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: #0f0f23;
+      color: #e0e0e0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .container {
+      width: 100%;
+      max-width: 420px;
+      padding: 24px;
+      text-align: center;
+    }
+    h1 { font-size: 2rem; margin-bottom: 8px; color: #fff; }
+    .subtitle { color: #888; margin-bottom: 32px; font-size: 0.95rem; }
+    .screen {
+      transition: opacity 0.35s ease, transform 0.35s ease;
+      opacity: 1;
+      transform: translateY(0);
+    }
+    .screen.hidden {
+      display: none !important;
+      opacity: 0;
+      transform: translateY(18px);
+    }
+    .screen.fade-in {
+      animation: fadeSlideIn 0.4s ease forwards;
+    }
+    @keyframes fadeSlideIn {
+      from { opacity: 0; transform: translateY(18px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Full-screen flash overlay */
+    .flash-overlay {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      opacity: 0;
+      z-index: 100;
+      transition: opacity 0.15s;
+    }
+    .flash-overlay.flash-correct { background: rgba(76, 175, 80, 0.18); opacity: 1; }
+    .flash-overlay.flash-wrong   { background: rgba(244, 67, 54, 0.18); opacity: 1; }
+    .flash-overlay.flash-timeout { background: rgba(255, 152, 0, 0.18); opacity: 1; }
+
+    /* Registration */
+    #register input {
+      width: 100%;
+      padding: 14px 18px;
+      font-size: 1.1rem;
+      border: 2px solid #333;
+      border-radius: 12px;
+      background: #1a1a2e;
+      color: #fff;
+      outline: none;
+      margin-bottom: 16px;
+      transition: border-color .2s;
+    }
+    #register input:focus { border-color: #6c63ff; }
+    .btn {
+      width: 100%;
+      padding: 14px;
+      font-size: 1.1rem;
+      font-weight: 600;
+      border: none;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: transform .1s, opacity .2s;
+    }
+    .btn:active { transform: scale(0.97); }
+    .btn-primary { background: #6c63ff; color: #fff; }
+    .btn-primary:hover { background: #5a52d5; }
+
+    /* Lobby */
+    #lobby .waiting {
+      font-size: 1.2rem;
+      margin-bottom: 16px;
+      color: #aaa;
+    }
+    .player-count {
+      display: inline-block;
+      background: #1a1a2e;
+      border: 1px solid #333;
+      border-radius: 8px;
+      padding: 8px 20px;
+      margin-bottom: 24px;
+      font-size: 1rem;
+    }
+    .lives-display {
+      font-size: 1.8rem;
+      margin: 12px 0;
+      letter-spacing: 4px;
+    }
+    .lives-label { color: #aaa; font-size: 0.85rem; margin-bottom: 8px; }
+
+    /* Question */
+    #game .question-num {
+      color: #6c63ff;
+      font-weight: 600;
+      margin-bottom: 8px;
+      font-size: 0.9rem;
+    }
+    #game .question-text {
+      font-size: 1.3rem;
+      font-weight: 600;
+      color: #fff;
+      margin-bottom: 24px;
+      line-height: 1.4;
+    }
+
+    /* Timer bar for student */
+    .student-timer {
+      width: 100%;
+      height: 6px;
+      background: #222;
+      border-radius: 3px;
+      margin-bottom: 16px;
+      overflow: hidden;
+    }
+    .student-timer-inner {
+      height: 100%;
+      background: #6c63ff;
+      border-radius: 3px;
+      width: 100%;
+      transition: width 0.2s linear, background 0.3s;
+    }
+    .student-timer-inner.urgent { background: #f44336; }
+
+    /* Streak badge */
+    .streak-badge {
+      display: inline-block;
+      background: linear-gradient(135deg, #ff9800, #ff5722);
+      color: #fff;
+      font-weight: 700;
+      font-size: 0.85rem;
+      padding: 4px 12px;
+      border-radius: 20px;
+      margin-bottom: 12px;
+      animation: streakPop 0.35s ease;
+    }
+    .streak-badge.hidden { display: none !important; }
+    @keyframes streakPop {
+      0% { transform: scale(0); }
+      60% { transform: scale(1.15); }
+      100% { transform: scale(1); }
+    }
+    .choices {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .choice-btn {
+      padding: 16px;
+      font-size: 1.1rem;
+      font-weight: 600;
+      border: 2px solid #333;
+      border-radius: 12px;
+      background: #1a1a2e;
+      color: #fff;
+      cursor: pointer;
+      transition: all .15s;
+    }
+    .choice-btn:hover { border-color: #6c63ff; background: #252547; }
+    .choice-btn.selected { border-color: #6c63ff; background: #3a3580; pointer-events: none; }
+    .choice-btn:disabled { opacity: 0.5; pointer-events: none; }
+    .choice-btn { animation: choiceAppear 0.3s ease backwards; }
+    .choice-btn:nth-child(1) { animation-delay: 0.08s; }
+    .choice-btn:nth-child(2) { animation-delay: 0.18s; }
+    @keyframes choiceAppear {
+      from { opacity: 0; transform: translateX(-16px); }
+      to   { opacity: 1; transform: translateX(0); }
+    }
+
+    /* Status bar */
+    .status-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      padding: 10px 16px;
+      background: #1a1a2e;
+      border-radius: 10px;
+    }
+    .status-bar .name { font-weight: 600; }
+    .status-bar .score { color: #6c63ff; font-weight: 600; }
+
+    /* Reveal */
+    #reveal {
+      padding: 20px;
+    }
+    .reveal-result {
+      font-size: 1.5rem;
+      font-weight: 700;
+      margin: 12px 0;
+    }
+    .reveal-result.correct { color: #4caf50; animation: bounceIn 0.5s ease; }
+    .reveal-result.wrong   { color: #f44336; animation: shakeX 0.5s ease; }
+    .reveal-result.timeout  { color: #ff9800; animation: shakeX 0.5s ease; }
+    .reveal-answer {
+      color: #aaa;
+      margin-top: 8px;
+      opacity: 0;
+      animation: fadeUp 0.4s 0.3s ease forwards;
+    }
+    /* Points earned popup */
+    .points-earned {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: #4caf50;
+      margin-top: 6px;
+      opacity: 0;
+      animation: pointsFly 0.6s 0.2s ease forwards;
+    }
+    .points-earned.zero { color: #f44336; }
+    @keyframes pointsFly {
+      0%   { opacity: 0; transform: translateY(10px) scale(0.8); }
+      50%  { opacity: 1; transform: translateY(-4px) scale(1.1); }
+      100% { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    /* Rank display on reveal */
+    .rank-display {
+      margin-top: 14px;
+      font-size: 1rem;
+      color: #aaa;
+      opacity: 0;
+      animation: fadeUp 0.4s 0.5s ease forwards;
+    }
+    .rank-display strong { color: #6c63ff; font-size: 1.3rem; }
+    @keyframes bounceIn {
+      0%   { transform: scale(0.3); opacity: 0; }
+      50%  { transform: scale(1.08); }
+      70%  { transform: scale(0.95); }
+      100% { transform: scale(1); opacity: 1; }
+    }
+    @keyframes shakeX {
+      0%, 100% { transform: translateX(0); }
+      15%  { transform: translateX(-12px); }
+      30%  { transform: translateX(10px); }
+      45%  { transform: translateX(-8px); }
+      60%  { transform: translateX(6px); }
+      75%  { transform: translateX(-3px); }
+    }
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(10px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Eliminated */
+    .eliminated-text {
+      font-size: 1.4rem;
+      color: #f44336;
+      font-weight: 700;
+      margin: 20px 0;
+      animation: bounceIn 0.6s ease;
+    }
+    .eliminated .subtitle {
+      opacity: 0;
+      animation: fadeUp 0.4s 0.4s ease forwards;
+    }
+
+    /* Life-lost heart animation */
+    .lives-display .heart {
+      display: inline-block;
+      transition: transform 0.3s, opacity 0.3s;
+    }
+    .lives-display .heart.lost {
+      animation: heartBreak 0.6s ease forwards;
+    }
+    @keyframes heartBreak {
+      0%   { transform: scale(1); opacity: 1; filter: none; }
+      30%  { transform: scale(1.4); opacity: 1; filter: brightness(1.5); }
+      60%  { transform: scale(0.8) rotate(-10deg); opacity: 0.6; }
+      100% { transform: scale(1) rotate(0deg); opacity: 1; filter: grayscale(1); }
+    }
+
+    /* Score pop */
+    .score-pop {
+      animation: popUp 0.4s ease;
+    }
+    @keyframes popUp {
+      0%   { transform: scale(1); }
+      40%  { transform: scale(1.35); color: #4caf50; }
+      100% { transform: scale(1); }
+    }
+
+    /* Finished */
+    #finished h2 { color: #fff; margin-bottom: 20px; }
+    .rank-list {
+      list-style: none;
+      text-align: left;
+    }
+    .rank-list li {
+      display: flex;
+      justify-content: space-between;
+      padding: 12px 16px;
+      border-radius: 10px;
+      margin-bottom: 8px;
+      background: #1a1a2e;
+    }
+    .rank-list li:first-child { background: #2a2755; border: 1px solid #6c63ff; }
+    .rank-list .rank-name { font-weight: 600; }
+    .rank-list .rank-score { color: #6c63ff; font-weight: 600; }
+
+    .error-msg { color: #f44336; margin-top: 12px; font-size: 0.9rem; }
+
+    /* countdown overlay */
+    .countdown {
+      font-size: 4rem;
+      font-weight: 800;
+      color: #6c63ff;
+      animation: pulse 1s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.15); opacity: 0.7; }
+    }
+
+    /* Confetti canvas */
+    #confetti {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 200;
+    }
+
+    /* Rank list entrance */
+    .rank-list li {
+      opacity: 0;
+      animation: fadeSlideIn 0.35s ease forwards;
+    }
+    .rank-list li:nth-child(1) { animation-delay: 0.1s; }
+    .rank-list li:nth-child(2) { animation-delay: 0.2s; }
+    .rank-list li:nth-child(3) { animation-delay: 0.3s; }
+    .rank-list li:nth-child(4) { animation-delay: 0.4s; }
+    .rank-list li:nth-child(5) { animation-delay: 0.5s; }
+    .rank-list li:nth-child(n+6) { animation-delay: 0.6s; }
+
+    /* Power-up badge */
+    .power-up-active {
+      display: inline-block;
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-weight: 700;
+      font-size: 0.85rem;
+      margin-bottom: 10px;
+      animation: powerUpPulse 1.5s ease infinite;
+    }
+    .power-up-active.hidden { display: none !important; }
+    .power-up-active.shield { background: linear-gradient(135deg, #00bcd4, #0097a7); color: #fff; }
+    .power-up-active.double { background: linear-gradient(135deg, #ffd700, #ff9800); color: #1a1a2e; }
+    .power-up-active.freeze { background: linear-gradient(135deg, #81d4fa, #0288d1); color: #fff; }
+    @keyframes powerUpPulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.05); box-shadow: 0 0 12px rgba(255, 215, 0, 0.3); }
+    }
+
+    /* Power-up notification */
+    .power-up-notif {
+      background: linear-gradient(135deg, #6c63ff, #00bcd4);
+      color: #fff;
+      padding: 10px 18px;
+      border-radius: 12px;
+      font-weight: 700;
+      font-size: 0.95rem;
+      margin-top: 10px;
+      animation: powerUpReveal 0.5s ease;
+    }
+    .power-up-notif.hidden { display: none !important; }
+    @keyframes powerUpReveal {
+      from { transform: scale(0.5) translateY(10px); opacity: 0; }
+      to { transform: scale(1) translateY(0); opacity: 1; }
+    }
+
+    /* Reaction bar */
+    .reaction-bar {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      margin-top: 16px;
+    }
+    .reaction-btn {
+      font-size: 1.5rem;
+      background: #1a1a2e;
+      border: 2px solid #333;
+      border-radius: 50%;
+      width: 50px;
+      height: 50px;
+      cursor: pointer;
+      transition: transform 0.15s, border-color 0.15s;
+    }
+    .reaction-btn:hover { border-color: #6c63ff; transform: scale(1.15); }
+    .reaction-btn:active { transform: scale(0.9); }
+    .reaction-btn.sent { border-color: #4caf50; opacity: 0.5; pointer-events: none; }
+
+    /* Intermission screen */
+    #intermission h2 { color: #fff; margin-bottom: 12px; }
+    .intermission-progress {
+      color: #6c63ff;
+      font-weight: 700;
+      font-size: 1.1rem;
+      margin-bottom: 16px;
+    }
+    .intermission-rank {
+      font-size: 1.3rem;
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 12px;
+    }
+    .intermission-rank strong { color: #6c63ff; font-size: 1.6rem; }
+    .intermission-streak {
+      color: #ff9800;
+      font-weight: 600;
+      margin-bottom: 16px;
+    }
+    .intermission-msg {
+      color: #888;
+      font-size: 0.9rem;
+      margin-top: 12px;
+      animation: pulse 2s infinite;
+    }
+
+    /* Emoji avatar */
+    .avatar-display {
+      font-size: 3rem;
+      margin-bottom: 8px;
+      cursor: pointer;
+      transition: transform 0.15s;
+    }
+    .avatar-display:hover { transform: scale(1.15); }
+    .avatar-hint { color: #666; font-size: 0.75rem; margin-bottom: 12px; }
+    .emoji-picker {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: center;
+      margin: 12px 0;
+      max-height: 180px;
+      overflow-y: auto;
+    }
+    .emoji-picker.hidden { display: none !important; }
+    .emoji-option {
+      font-size: 1.6rem;
+      width: 42px;
+      height: 42px;
+      border: 2px solid #333;
+      border-radius: 10px;
+      background: #1a1a2e;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: border-color 0.15s, transform 0.1s;
+    }
+    .emoji-option:hover { border-color: #6c63ff; transform: scale(1.12); }
+    .emoji-option.selected { border-color: #6c63ff; background: #3a3580; }
+    .lobby-avatar { font-size: 3.5rem; margin-bottom: 4px; cursor: pointer; transition: transform 0.15s; }
+    .lobby-avatar:hover { transform: scale(1.12); }
+
+    /* Team badge */
+    .team-badge {
+      display: inline-block;
+      padding: 4px 14px;
+      border-radius: 20px;
+      font-weight: 700;
+      font-size: 0.85rem;
+      color: #fff;
+      margin-bottom: 10px;
+    }
+    .team-badge.hidden { display: none !important; }
+    .team-badge.Red { background: #f44336; }
+    .team-badge.Blue { background: #2196f3; }
+
+    /* Paused overlay */
+    .paused-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.7);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 300;
+      animation: fadeSlideIn 0.3s ease;
+    }
+    .paused-overlay.hidden { display: none !important; }
+    .paused-text {
+      font-size: 2.5rem;
+      font-weight: 800;
+      color: #ff9800;
+      animation: pulse 1.5s infinite;
+    }
+
+    /* Kicked */
+    .kicked-text { font-size: 1.4rem; color: #f44336; font-weight: 700; margin: 20px 0; }
+
+    /* Wager round */
+    .wager-banner {
+      background: linear-gradient(135deg, #ffd700, #ff9800);
+      color: #1a1a2e;
+      padding: 8px 18px;
+      border-radius: 12px;
+      font-weight: 800;
+      font-size: 0.95rem;
+      margin-bottom: 12px;
+      animation: pulse 1.2s infinite;
+    }
+    .wager-banner.hidden { display: none !important; }
+    .wager-input {
+      width: 120px;
+      padding: 8px 12px;
+      font-size: 1rem;
+      font-weight: 700;
+      border: 2px solid #ffd700;
+      border-radius: 10px;
+      background: #1a1a2e;
+      color: #ffd700;
+      text-align: center;
+      margin-bottom: 12px;
+    }
+    .wager-row { margin-bottom: 12px; }
+    .wager-row.hidden { display: none !important; }
+
+    /* Spectator */
+    .spectator-bar {
+      background: linear-gradient(135deg, #333, #1a1a2e);
+      border: 1px solid #555;
+      padding: 10px 18px;
+      border-radius: 12px;
+      font-size: 0.9rem;
+      color: #aaa;
+      margin-bottom: 16px;
+    }
+    .spectator-bar .spectator-tag {
+      color: #ff9800;
+      font-weight: 700;
+    }
+
+    /* Revenge round */
+    .revenge-banner {
+      background: linear-gradient(135deg, #f44336, #ff5722);
+      color: #fff;
+      padding: 12px 22px;
+      border-radius: 14px;
+      font-weight: 800;
+      font-size: 1.1rem;
+      margin-bottom: 16px;
+      animation: pulse 0.8s infinite;
+    }
+
+    /* Visual urgency */
+    .urgent-screen {
+      animation: urgentShake 0.3s ease infinite;
+    }
+    @keyframes urgentShake {
+      0%, 100% { transform: translateX(0); }
+      25% { transform: translateX(-2px); }
+      75% { transform: translateX(2px); }
+    }
+    .urgent-vignette {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 90;
+      box-shadow: inset 0 0 80px rgba(244, 67, 54, 0.4);
+      opacity: 0;
+      transition: opacity 0.5s;
+    }
+    .urgent-vignette.active { opacity: 1; }
+
+    /* Awards */
+    .awards-section {
+      margin: 20px 0;
+    }
+    .award-card {
+      background: #1a1a2e;
+      border: 1px solid #333;
+      border-radius: 12px;
+      padding: 12px 18px;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      animation: fadeSlideIn 0.4s ease backwards;
+    }
+    .award-icon { font-size: 1.8rem; }
+    .award-info { text-align: left; }
+    .award-title { color: #ffd700; font-weight: 700; font-size: 0.95rem; }
+    .award-name { color: #aaa; font-size: 0.85rem; }
+
+    /* Stats row */
+    .stats-row {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin: 14px 0;
+    }
+    .stat-card {
+      background: #1a1a2e;
+      border: 1px solid #333;
+      border-radius: 10px;
+      padding: 10px 14px;
+      min-width: 80px;
+    }
+    .stat-value { font-size: 1.3rem; font-weight: 800; color: #6c63ff; }
+    .stat-label { font-size: 0.7rem; color: #888; }
+
+    /* Freeze overlay */
+    .freeze-overlay {
+      position: fixed; inset: 0;
+      background: radial-gradient(ellipse at center, rgba(129,212,250,0.35) 0%, rgba(2,136,209,0.55) 100%);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 250;
+      pointer-events: none;
+      animation: freezePulse 0.8s ease infinite;
+    }
+    .freeze-overlay.hidden { display: none !important; }
+    .freeze-text { font-size: 2.5rem; font-weight: 800; color: #fff; text-shadow: 0 0 20px #0288d1; }
+    @keyframes freezePulse {
+      0%, 100% { opacity: 0.85; }
+      50% { opacity: 1; }
+    }
+
+    /* Steal notification */
+    .steal-notif {
+      background: linear-gradient(135deg, #f44336, #ff9800);
+      color: #fff;
+      padding: 8px 16px;
+      border-radius: 12px;
+      font-weight: 700;
+      font-size: 0.9rem;
+      margin-top: 8px;
+      animation: powerUpReveal 0.5s ease;
+    }
+    .steal-notif.hidden { display: none !important; }
+  </style>
+</head>
+<body>
+  <div class="container">
+
+    <!-- Flash overlay for correct/wrong feedback -->
+    <div class="flash-overlay" id="flashOverlay"></div>
+    <canvas id="confetti"></canvas>
+
+    <!-- Urgency vignette -->
+    <div id="urgentVignette" class="urgent-vignette"></div>
+
+    <!-- Freeze overlay -->
+    <div id="freezeOverlay" class="freeze-overlay hidden">
+      <div class="freeze-text">❄️ FROZEN! <span id="freezeCountdown">3</span></div>
+    </div>
+
+    <!-- Register screen -->
+    <div id="register" class="screen">
+      <h1>Quiz Game</h1>
+      <p class="subtitle">Enter your name to join</p>
+      <input id="nameInput" type="text" placeholder="Your name" maxlength="30" autocomplete="off" />
+      <button class="btn btn-primary" id="joinBtn">Join Game</button>
+      <p id="regError" class="error-msg hidden"></p>
+    </div>
+
+    <!-- Lobby -->
+    <div id="lobby" class="screen hidden">
+      <h1>You're In!</h1>
+      <div class="lobby-avatar" id="lobbyAvatar" title="Click to change"></div>
+      <div id="lobbyPicker" class="emoji-picker hidden"></div>
+      <p class="waiting">Waiting for host to start…</p>
+      <div class="player-count"><span id="lobbyCount">0</span> players connected</div>
+      <div class="lives-label">YOUR LIVES</div>
+      <div class="lives-display" id="lobbyLives">❤️ ❤️ ❤️</div>
+    </div>
+
+    <!-- Game starting countdown -->
+    <div id="starting" class="screen hidden">
+      <p class="subtitle">Get ready!</p>
+      <div class="countdown" id="countdownNum">3</div>
+    </div>
+
+    <!-- Question -->
+    <div id="game" class="screen hidden">
+      <div class="status-bar">
+        <span class="name" id="playerName"></span>
+        <span class="score">Score: <span id="playerScore">0</span></span>
+      </div>
+      <div class="team-badge hidden" id="gameTeamBadge"></div>
+      <div class="lives-display" id="gameLives">❤️ ❤️ ❤️</div>
+      <div class="streak-badge hidden" id="streakBadge"></div>
+      <div class="power-up-active hidden" id="powerUpBadge"></div>
+      <div class="wager-banner hidden" id="wagerBanner">🎰 WAGER ROUND! Bet your points!</div>
+      <div class="wager-row hidden" id="wagerRow">
+        <input type="number" class="wager-input" id="wagerInput" min="0" placeholder="Wager" />
+        <div style="margin-top:8px;display:flex;gap:8px;justify-content:center;">
+          <button id="placeWagerBtn" style="width:auto;display:inline-block;padding:8px 12px;margin-left:8px;" class="btn btn-primary">Place Wager</button>
+          <button id="allInBtn" style="width:auto;display:inline-block;padding:8px 12px;margin-left:8px;" class="btn">All-in</button>
+        </div>
+      </div>
+      <div class="student-timer"><div class="student-timer-inner" id="studentTimer"></div></div>
+      <p class="question-num" id="qNum"></p>
+      <p class="question-text" id="qText"></p>
+      <div class="choices" id="choices"></div>
+    </div>
+
+    <!-- Reveal -->
+    <div id="reveal" class="screen hidden">
+      <p id="revealResult" class="reveal-result"></p>
+      <p class="reveal-answer">Correct answer: <strong id="revealAnswer"></strong></p>
+      <p id="pointsEarned" class="points-earned"></p>
+      <div class="lives-display" id="revealLives"></div>
+      <div id="rankDisplay" class="rank-display"></div>
+      <div id="stealNotif" class="steal-notif hidden"></div>
+      <div id="powerUpNotif" class="power-up-notif hidden"></div>
+      <div class="reaction-bar">
+        <button class="reaction-btn" data-emoji="\uD83D\uDE31">😱</button>
+        <button class="reaction-btn" data-emoji="\uD83C\uDF89">🎉</button>
+        <button class="reaction-btn" data-emoji="\uD83D\uDE24">😤</button>
+        <button class="reaction-btn" data-emoji="\uD83E\uDD2F">🤯</button>
+      </div>
+    </div>
+
+    <!-- Intermission -->
+    <div id="intermission" class="screen hidden">
+      <h2>⏸️ Halftime</h2>
+      <p class="intermission-progress" id="intermProgress"></p>
+      <div class="intermission-rank" id="intermRank"></div>
+      <div class="intermission-streak" id="intermStreak"></div>
+      <p class="intermission-msg">Next round starting soon...</p>
+    </div>
+
+    <!-- Eliminated (now spectator) -->
+    <div id="eliminated" class="screen hidden">
+      <p class="eliminated-text">💀 You've been eliminated!</p>
+      <p class="subtitle">You're now spectating</p>
+      <div class="spectator-bar"><span class="spectator-tag">👁️ SPECTATOR</span> — Watch the game continue</div>
+      <div id="spectatorContent"></div>
+      <div class="reaction-bar">
+        <button class="reaction-btn" data-emoji="\uD83D\uDE31">😱</button>
+        <button class="reaction-btn" data-emoji="\uD83C\uDF89">🎉</button>
+        <button class="reaction-btn" data-emoji="\uD83D\uDE24">😤</button>
+        <button class="reaction-btn" data-emoji="\uD83E\uDD2F">🤯</button>
+      </div>
+    </div>
+
+    <!-- Revenge round -->
+    <div id="revenge" class="screen hidden">
+      <div class="revenge-banner">💀 REVENGE ROUND!</div>
+      <p class="subtitle">Answer correctly to revive with 1 life!</p>
+      <p class="question-text" id="revengeQText"></p>
+      <div class="choices" id="revengeChoices"></div>
+    </div>
+
+    <!-- Kicked -->
+    <div id="kicked" class="screen hidden">
+      <p class="kicked-text">🚫 You were removed by the host</p>
+      <p class="subtitle">Refresh to rejoin</p>
+    </div>
+
+    <!-- Paused overlay -->
+    <div id="pausedOverlay" class="paused-overlay hidden">
+      <div class="paused-text">⏸️ PAUSED</div>
+    </div>
+
+    <!-- Finished -->
+    <div id="finished" class="screen hidden">
+      <h2>🏆 Game Over</h2>
+      <div class="stats-row" id="myStats"></div>
+      <div class="awards-section" id="awardsSection"></div>
+      <ol class="rank-list" id="rankList"></ol>
+    </div>
+
+  </div>
+
+  <script>
+    const ws = new WebSocket(`ws://${location.host}`);
+
+    const screens = ['register', 'lobby', 'starting', 'game', 'reveal', 'intermission', 'eliminated', 'kicked', 'revenge', 'finished'];
+    function show(id) {
+      screens.forEach(s => {
+        const el = document.getElementById(s);
+        if (s === id) {
+          el.classList.remove('hidden');
+          el.classList.remove('fade-in');
+          void el.offsetWidth; // reflow to restart animation
+          el.classList.add('fade-in');
+        } else {
+          el.classList.add('hidden');
+          el.classList.remove('fade-in');
+        }
+      });
+    }
+
+    function flash(type) {
+      const overlay = document.getElementById('flashOverlay');
+      overlay.className = 'flash-overlay flash-' + type;
+      setTimeout(() => { overlay.className = 'flash-overlay'; }, 500);
+    }
+
+    // ── Sound Effects (Web Audio API placeholders) ──────────
+    let audioCtx = null;
+    function initAudio() {
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+    }
+    function playTone(freq, type, duration, vol, ramp) {
+      if (!audioCtx) return;
+      const t = audioCtx.currentTime;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = type;
+      osc.frequency.setValueAtTime(freq, t);
+      if (ramp) osc.frequency.linearRampToValueAtTime(ramp, t + duration);
+      gain.gain.setValueAtTime(vol, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + duration);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start(t);
+      osc.stop(t + duration);
+    }
+    function sfxCorrect() {
+      playTone(523, 'sine', 0.15, 0.3);
+      setTimeout(() => playTone(784, 'sine', 0.3, 0.3), 100);
+    }
+    function sfxWrong() {
+      playTone(150, 'sawtooth', 0.4, 0.2);
+    }
+    function sfxTimeout() {
+      playTone(400, 'triangle', 0.5, 0.2, 200);
+    }
+    function sfxTick() {
+      playTone(800, 'sine', 0.05, 0.15);
+    }
+    function sfxCountdown(n) {
+      playTone(n === 1 ? 880 : 440, 'square', 0.12, 0.2);
+    }
+    function sfxEliminated() {
+      playTone(440, 'sine', 0.2, 0.25);
+      setTimeout(() => playTone(349, 'sine', 0.2, 0.25), 200);
+      setTimeout(() => playTone(262, 'sine', 0.4, 0.25), 400);
+    }
+    function sfxFinished() {
+      playTone(523, 'square', 0.15, 0.2);
+      setTimeout(() => playTone(659, 'square', 0.15, 0.2), 150);
+      setTimeout(() => playTone(784, 'square', 0.15, 0.2), 300);
+      setTimeout(() => playTone(1047, 'square', 0.4, 0.25), 450);
+    }
+    // Escalating tick: pitch rises as time runs out
+    function sfxTickEscalating(remaining) {
+      const pitch = 600 + Math.max(0, (5000 - remaining) / 5000) * 600;
+      playTone(pitch, 'sine', 0.04, 0.12 + (5000 - remaining) / 5000 * 0.1);
+    }
+    // Multiple reveal jingles (random)
+    function sfxRevealVariant() {
+      const v = Math.floor(Math.random() * 3);
+      if (v === 0) { sfxCorrect(); }
+      else if (v === 1) {
+        playTone(660, 'triangle', 0.12, 0.25);
+        setTimeout(() => playTone(880, 'triangle', 0.2, 0.25), 100);
+      } else {
+        playTone(440, 'sine', 0.1, 0.2);
+        setTimeout(() => playTone(554, 'sine', 0.1, 0.2), 80);
+        setTimeout(() => playTone(660, 'sine', 0.2, 0.25), 160);
+      }
+    }
+    function sfxStreak() {
+      playTone(880, 'triangle', 0.08, 0.2);
+      setTimeout(() => playTone(1100, 'triangle', 0.08, 0.2), 60);
+      setTimeout(() => playTone(1320, 'triangle', 0.15, 0.25), 120);
+    }
+    function sfxPowerUp() {
+      playTone(523, 'sine', 0.1, 0.2);
+      setTimeout(() => playTone(784, 'sine', 0.1, 0.2), 80);
+      setTimeout(() => playTone(1047, 'sine', 0.2, 0.25), 160);
+    }
+    function sfxFreeze() {
+      playTone(1200, 'sine', 0.3, 0.2, 400);
+    }
+    function sfxSteal() {
+      playTone(200, 'sawtooth', 0.15, 0.2);
+      setTimeout(() => playTone(300, 'sawtooth', 0.15, 0.2), 100);
+      setTimeout(() => playTone(600, 'sawtooth', 0.2, 0.25), 200);
+    }
+    function sfxWager() {
+      playTone(440, 'square', 0.08, 0.15);
+      setTimeout(() => playTone(554, 'square', 0.08, 0.15), 100);
+      setTimeout(() => playTone(659, 'square', 0.08, 0.15), 200);
+      setTimeout(() => playTone(880, 'square', 0.2, 0.2), 300);
+    }
+    function sfxRevenge() {
+      playTone(220, 'sawtooth', 0.2, 0.2);
+      setTimeout(() => playTone(330, 'sawtooth', 0.2, 0.2), 150);
+      setTimeout(() => playTone(440, 'sawtooth', 0.3, 0.25), 300);
+    }
+
+    // ── Ambient music during questions ─────────────────
+    let ambientOsc = null, ambientGain = null, ambientLfo = null;
+    let ambientIntensified = false;
+    function startAmbient() {
+      if (!audioCtx) return;
+      stopAmbient();
+      ambientIntensified = false;
+      ambientOsc = audioCtx.createOscillator();
+      ambientGain = audioCtx.createGain();
+      ambientLfo = audioCtx.createOscillator();
+      const lfoGain = audioCtx.createGain();
+      ambientOsc.type = 'sine';
+      ambientOsc.frequency.value = 80;
+      ambientGain.gain.value = 0.06;
+      ambientLfo.type = 'sine';
+      ambientLfo.frequency.value = 2;
+      lfoGain.gain.value = 0.04;
+      ambientLfo.connect(lfoGain);
+      lfoGain.connect(ambientGain.gain);
+      ambientOsc.connect(ambientGain);
+      ambientGain.connect(audioCtx.destination);
+      ambientOsc.start();
+      ambientLfo.start();
+    }
+    function stopAmbient() {
+      try { if (ambientOsc) ambientOsc.stop(); } catch(e) {}
+      try { if (ambientLfo) ambientLfo.stop(); } catch(e) {}
+      ambientOsc = null; ambientLfo = null; ambientGain = null;
+    }
+    function intensifyAmbient() {
+      if (ambientIntensified || !ambientOsc || !audioCtx) return;
+      ambientIntensified = true;
+      const t = audioCtx.currentTime;
+      ambientOsc.frequency.linearRampToValueAtTime(120, t + 0.5);
+      ambientGain.gain.linearRampToValueAtTime(0.12, t + 0.5);
+    }
+
+    let myName = '';
+    let myEmoji = '';
+    let myTeam = null;
+    let myScore = 0;
+    let myLives = 3;
+    let maxLives = 3;
+    let myStreak = 0;
+    let lastChoice = null;
+    let studentTimerIv = null;
+    let studentTimeLimit = 0; // ms
+    let studentTimeElapsed = 0; // ms
+    let freezeTimerIv = null;
+    let isFrozen = false;
+
+    function startStudentTimer(totalMs, startElapsedMs = 0) {
+      if (!totalMs || totalMs <= 0) return;
+      clearInterval(studentTimerIv);
+      studentTimeLimit = totalMs;
+      studentTimeElapsed = Math.max(0, startElapsedMs);
+      const timerBar = document.getElementById('studentTimer');
+      if (!timerBar) return;
+      // initialize
+      const pctInit = Math.max(0, 100 - (studentTimeElapsed / studentTimeLimit) * 100);
+      timerBar.style.width = pctInit + '%';
+      timerBar.classList.remove('urgent');
+      document.getElementById('urgentVignette').classList.remove('active');
+      document.getElementById('game').classList.remove('urgent-screen');
+
+      studentTimerIv = setInterval(() => {
+        studentTimeElapsed += 100;
+        const pct = Math.max(0, 100 - (studentTimeElapsed / studentTimeLimit) * 100);
+        timerBar.style.width = pct + '%';
+        if (pct < 25) timerBar.classList.add('urgent'); else timerBar.classList.remove('urgent');
+        const stRemaining = Math.max(0, studentTimeLimit - studentTimeElapsed);
+        if (stRemaining <= 5000 && stRemaining > 0 && (studentTimeElapsed % 1000) < 100) sfxTickEscalating(stRemaining);
+        if (stRemaining <= 5000) intensifyAmbient();
+        if (stRemaining <= 3000 && stRemaining > 0) {
+          document.getElementById('urgentVignette').classList.add('active');
+          document.getElementById('game').classList.add('urgent-screen');
+        } else {
+          document.getElementById('urgentVignette').classList.remove('active');
+          document.getElementById('game').classList.remove('urgent-screen');
+        }
+        if (studentTimeElapsed >= studentTimeLimit) {
+          clearInterval(studentTimerIv);
+        }
+      }, 100);
+    }
+
+    let prevLives = 3;
+
+    function livesHtml(n, animate) {
+      let html = '';
+      for (let i = 0; i < maxLives; i++) {
+        const alive = i < n;
+        const justLost = animate && i >= n && i < prevLives;
+        html += `<span class="heart${justLost ? ' lost' : ''}">${alive ? '❤️' : '🖤'}</span> `;
+      }
+      return html;
+    }
+
+    function livesStr(n) {
+      return Array(Math.max(0, n)).fill('❤️').join(' ') +
+             (n < maxLives ? ' ' + Array(maxLives - Math.max(0, n)).fill('🖤').join(' ') : '');
+    }
+
+    document.getElementById('joinBtn').addEventListener('click', () => {
+      initAudio();
+      const name = document.getElementById('nameInput').value.trim();
+      if (!name) return;
+      ws.send(JSON.stringify({ type: 'register', name }));
+    });
+
+    document.getElementById('nameInput').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') document.getElementById('joinBtn').click();
+    });
+
+    ws.addEventListener('message', (e) => {
+      const msg = JSON.parse(e.data);
+
+      // Quick-path for wager placement acknowledgements
+      if (msg.type === 'wager-placed') {
+        const wInput = document.getElementById('wagerInput');
+        if (wInput) {
+          wInput.value = msg.amount;
+          wInput.disabled = true;
+        }
+        const placeBtn = document.getElementById('placeWagerBtn');
+        if (placeBtn) placeBtn.disabled = true;
+        const notif = document.getElementById('stealNotif');
+        if (notif) {
+          notif.textContent = `🎰 Wager placed: ${msg.amount}`;
+          notif.classList.remove('hidden');
+          setTimeout(() => notif.classList.add('hidden'), 2200);
+        }
+        return;
+      }
+
+      switch (msg.type) {
+        case 'registered':
+          myName = msg.name;
+          myEmoji = msg.emoji || '';
+          myLives = msg.lives;
+          maxLives = msg.lives;
+          myTeam = msg.team || null;
+          document.getElementById('lobbyAvatar').textContent = myEmoji;
+          document.getElementById('lobbyLives').textContent = livesStr(myLives);
+          updateTeamBadges();
+          buildLobbyPicker();
+          show('lobby');
+          break;
+
+        case 'emoji-updated':
+          myEmoji = msg.emoji;
+          document.getElementById('lobbyAvatar').textContent = myEmoji;
+          break;
+
+        case 'error':
+          const err = document.getElementById('regError');
+          err.textContent = msg.message;
+          err.classList.remove('hidden');
+          break;
+
+        case 'lobby':
+          document.getElementById('lobbyCount').textContent = msg.players.length;
+          // Update my team from lobby data if changed
+          if (msg.teamMode) {
+            const me = msg.players.find(p => p.name === myName);
+            if (me) myTeam = me.team;
+          } else {
+            myTeam = null;
+          }
+          updateTeamBadges();
+          break;
+
+        case 'game-start': {
+          show('starting');
+          let count = 3;
+          document.getElementById('countdownNum').textContent = count;
+          sfxCountdown(count);
+          const iv = setInterval(() => {
+            count--;
+            if (count <= 0) {
+              clearInterval(iv);
+            } else {
+              document.getElementById('countdownNum').textContent = count;
+              sfxCountdown(count);
+            }
+          }, 700);
+          break;
+        }
+
+        case 'question':
+          lastChoice = null;
+          document.getElementById('playerName').textContent = myEmoji + ' ' + myName;
+          // Show team badge during game
+          const gtb = document.getElementById('gameTeamBadge');
+          if (myTeam) {
+            gtb.textContent = (myTeam === 'Red' ? '🔴' : '🔵') + ' Team ' + myTeam;
+            gtb.className = 'team-badge ' + myTeam;
+          } else {
+            gtb.className = 'team-badge hidden';
+          }
+          document.getElementById('playerScore').textContent = myScore;
+          document.getElementById('gameLives').textContent = livesStr(myLives);
+          document.getElementById('qNum').textContent = `Question ${msg.index + 1} of ${msg.total}`;
+          document.getElementById('qText').textContent = msg.question;
+
+          // Streak badge
+          myStreak = msg.streak || 0;
+          const badge = document.getElementById('streakBadge');
+          if (myStreak >= 2) {
+            badge.textContent = `🔥 ${myStreak} streak!`;
+            badge.classList.remove('hidden');
+            if (myStreak >= 3) sfxStreak();
+          } else {
+            badge.classList.add('hidden');
+          }
+
+          // Power-up badge
+          const puBadge = document.getElementById('powerUpBadge');
+          if (msg.powerUp) {
+            const puLabels = { shield: '🛡️ Shield Active', double: '⚡ 2X Points', freeze: '❄️ Freeze Ready' };
+            puBadge.textContent = puLabels[msg.powerUp] || msg.powerUp;
+            puBadge.className = 'power-up-active ' + msg.powerUp;
+          } else {
+            puBadge.className = 'power-up-active hidden';
+          }
+
+          // Wager round
+          const wBanner = document.getElementById('wagerBanner');
+          const wRow = document.getElementById('wagerRow');
+          if (msg.wager) {
+            sfxWager();
+            wBanner.classList.remove('hidden');
+            wRow.classList.remove('hidden');
+            const wagerInput = document.getElementById('wagerInput');
+            // Match server-side cap: only allow a fraction of current score to be wagered
+            const maxAllowed = Math.floor((msg.score || 0) * 0.33);
+            wagerInput.max = Math.max(0, maxAllowed);
+            // Default to half of the allowed max (conservative)
+            const defaultVal = maxAllowed > 0 ? Math.max(1, Math.floor(maxAllowed * 0.5)) : 0;
+            wagerInput.value = defaultVal;
+            wagerInput.disabled = false;
+            document.getElementById('placeWagerBtn').disabled = false;
+            document.getElementById('allInBtn').disabled = false;
+          } else {
+            wBanner.classList.add('hidden');
+            wRow.classList.add('hidden');
+          }
+
+          // Reset urgency visuals
+          document.getElementById('urgentVignette').classList.remove('active');
+          document.getElementById('game').classList.remove('urgent-screen');
+
+          // Student timer bar
+          startStudentTimer((msg.timeLimit || 15) * 1000, 0);
+
+          const choicesDiv = document.getElementById('choices');
+          choicesDiv.innerHTML = '';
+          // Shuffle the two choices
+          const shuffled = [...msg.choices].sort(() => Math.random() - 0.5);
+          shuffled.forEach(c => {
+            const btn = document.createElement('button');
+            btn.className = 'choice-btn';
+            btn.textContent = c;
+            // If client is currently frozen, newly-created choices should start disabled
+            if (isFrozen) btn.disabled = true;
+            btn.addEventListener('click', () => {
+              lastChoice = c;
+              document.querySelectorAll('#choices .choice-btn').forEach(b => {
+                b.classList.remove('selected');
+                b.disabled = true;
+              });
+              btn.classList.add('selected');
+              const payload = { type: 'answer', choice: c };
+              // Include wager if wager round; clamp to allowed max
+              const wagerInputEl = document.getElementById('wagerInput');
+              const raw = wagerInputEl ? parseInt(wagerInputEl.value) || 0 : 0;
+              const maxAllowed = wagerInputEl ? (parseInt(wagerInputEl.max) || 0) : 0;
+              const wagerVal = Math.max(0, Math.min(raw, maxAllowed));
+              if (msg.wager) payload.wager = wagerVal;
+              ws.send(JSON.stringify(payload));
+            });
+            choicesDiv.appendChild(btn);
+          });
+          show('game');
+          startAmbient();
+          break;
+
+        case 'reveal': {
+          clearInterval(studentTimerIv);
+          stopAmbient();
+          document.getElementById('urgentVignette').classList.remove('active');
+          document.getElementById('game').classList.remove('urgent-screen');
+          const oldLives = myLives;
+          myLives = msg.lives;
+          myScore = msg.score;
+          myStreak = msg.streak || 0;
+          const isCorrect = lastChoice === msg.answer;
+          const resultEl = document.getElementById('revealResult');
+
+          // Reset reaction buttons
+          document.querySelectorAll('.reaction-btn').forEach(b => b.classList.remove('sent'));
+
+          // Flash the screen
+          if (msg.shieldUsed) {
+            flash('correct');
+            sfxRevealVariant();
+          } else if (!lastChoice) {
+            flash('timeout');
+            sfxTimeout();
+          } else if (isCorrect) {
+            flash('correct');
+            sfxRevealVariant();
+            fireConfetti();
+          } else {
+            flash('wrong');
+            sfxWrong();
+          }
+
+          if (msg.shieldUsed) {
+            resultEl.textContent = '🛡️ Shield saved you!';
+            resultEl.className = 'reveal-result correct';
+          } else {
+            resultEl.textContent = lastChoice ? (isCorrect ? '✓ Correct!' : '✗ Wrong!') : '⏱ Time\u0027s up!';
+            resultEl.className = 'reveal-result ' + (lastChoice ? (isCorrect ? 'correct' : 'wrong') : 'timeout');
+          }
+          document.getElementById('revealAnswer').textContent = msg.answer;
+
+          // Points earned display
+          const ptsEl = document.getElementById('pointsEarned');
+          const pts = msg.pointsEarned || 0;
+          if (isCorrect && pts > 0) {
+            ptsEl.textContent = `+${pts} points` + (msg.wasDouble ? ' (2X!)' : myStreak >= 3 ? ` (${myStreak}x streak!)` : '');
+            ptsEl.className = 'points-earned';
+          } else {
+            ptsEl.textContent = msg.shieldUsed ? 'Shield absorbed!' : (lastChoice ? 'No points' : 'No points (timed out)');
+            ptsEl.className = 'points-earned' + (msg.shieldUsed ? '' : ' zero');
+          }
+
+          // Animate lives with heart-break if lost
+          prevLives = oldLives;
+          document.getElementById('revealLives').innerHTML = livesHtml(myLives, oldLives > myLives);
+
+          // Animate score pop if gained
+          if (isCorrect) {
+            const scoreEl = document.getElementById('playerScore');
+            scoreEl.textContent = myScore;
+            scoreEl.classList.remove('score-pop');
+            void scoreEl.offsetWidth;
+            scoreEl.classList.add('score-pop');
+          }
+
+          // Show rank
+          const rankEl = document.getElementById('rankDisplay');
+          if (msg.rank && msg.totalPlayers) {
+            rankEl.innerHTML = `Your rank: <strong>#${msg.rank}</strong> of ${msg.totalPlayers}`;
+          } else {
+            rankEl.innerHTML = '';
+          }
+
+          // Power-up notification
+          const puNotif = document.getElementById('powerUpNotif');
+          if (msg.newPowerUp) {
+            const puNames = { shield: '🛡️ You earned a Shield!', double: '⚡ You earned Double Points!', freeze: '❄️ You earned Freeze!' };
+            puNotif.textContent = puNames[msg.newPowerUp] || msg.newPowerUp;
+            puNotif.classList.remove('hidden');
+            sfxPowerUp();
+          } else {
+            puNotif.classList.add('hidden');
+          }
+
+          // Steal notification
+          const stealEl = document.getElementById('stealNotif');
+          if (msg.steal) {
+            sfxSteal();
+            if (msg.steal.to === myName) {
+              stealEl.textContent = `⚡ You stole ${msg.steal.amount} pts from ${msg.steal.fromEmoji || ''} ${msg.steal.from}!`;
+            } else if (msg.steal.from === myName) {
+              stealEl.textContent = `💸 ${msg.steal.toEmoji || ''} ${msg.steal.to} stole ${msg.steal.amount} pts from you!`;
+            } else {
+              stealEl.textContent = `⚡ ${msg.steal.toEmoji || ''} ${msg.steal.to} stole ${msg.steal.amount} pts from ${msg.steal.fromEmoji || ''} ${msg.steal.from}`;
+            }
+            stealEl.classList.remove('hidden');
+          } else {
+            stealEl.classList.add('hidden');
+          }
+
+          if (!msg.alive) {
+            sfxEliminated();
+            show('eliminated');
+          } else {
+            show('reveal');
+          }
+          break;
+        }
+
+        case 'finished': {
+          stopAmbient();
+          sfxFinished();
+
+          // My stats
+          const me = msg.rankings.find(r => r.name === myName);
+          const statsDiv = document.getElementById('myStats');
+          if (me && me.stats) {
+            const s = me.stats;
+            statsDiv.innerHTML = `
+              <div class="stat-card"><div class="stat-value">${s.accuracy}%</div><div class="stat-label">Accuracy</div></div>
+              <div class="stat-card"><div class="stat-value">${s.avgTime}ms</div><div class="stat-label">Avg Time</div></div>
+              <div class="stat-card"><div class="stat-value">${s.bestStreak}</div><div class="stat-label">Best Streak</div></div>
+              <div class="stat-card"><div class="stat-value">${s.correct}/${s.correct + s.wrong}</div><div class="stat-label">Correct</div></div>`;
+          } else { statsDiv.innerHTML = ''; }
+
+          // Awards
+          const awardsDiv = document.getElementById('awardsSection');
+          if (msg.awards && msg.awards.length > 0) {
+            awardsDiv.innerHTML = '<h3 style="margin:0.5rem 0;">🏅 Awards</h3>' +
+              msg.awards.map(a => `<div class="award-card">
+                <span class="award-icon">${a.icon}</span>
+                <div class="award-info">
+                  <div class="award-title">${escapeHtml(a.title)}</div>
+                  <div class="award-name">${a.emoji || ''} ${escapeHtml(a.name)} — ${escapeHtml(a.detail)}</div>
+                </div>
+              </div>`).join('');
+          } else { awardsDiv.innerHTML = ''; }
+
+          // Rankings
+          const list = document.getElementById('rankList');
+          list.innerHTML = '';
+          msg.rankings.forEach((r, i) => {
+            const li = document.createElement('li');
+            li.innerHTML = `<span class="rank-name">${i + 1}. ${r.emoji || ''} ${escapeHtml(r.name)}</span>
+                            <span class="rank-score">${r.score} pts ${livesStr(r.lives)}</span>`;
+            list.appendChild(li);
+          });
+          show('finished');
+          break;
+        }
+
+        case 'intermission': {
+          stopAmbient();
+          const myRank = msg.rankings.findIndex(r => r.name === myName) + 1;
+          document.getElementById('intermProgress').textContent =
+            `${msg.questionsCompleted} of ${msg.questionsTotal} questions completed`;
+          document.getElementById('intermRank').innerHTML = myRank
+            ? `Your rank: <strong>#${myRank}</strong> of ${msg.rankings.length}`
+            : '';
+          const sl = msg.streakLeader;
+          document.getElementById('intermStreak').textContent = sl
+            ? `🔥 Streak leader: ${sl.name} (${sl.streak} in a row!)`
+            : '';
+          show('intermission');
+          break;
+        }
+
+        case 'spectate-question': {
+          const sc = document.getElementById('spectatorContent');
+          sc.innerHTML = `<p class="question-text">${escapeHtml(msg.question)}</p>
+            <p class="subtitle">Q${msg.index + 1} of ${msg.total}${msg.wager ? ' — 🎰 Wager Round' : ''}</p>
+            <div class="choices">${msg.choices.map(c => `<button class="choice-btn" disabled>${escapeHtml(c)}</button>`).join('')}</div>`;
+          // Ensure spectator view is visible for eliminated players
+          show('eliminated');
+          break;
+        }
+
+        case 'spectate-reveal': {
+          const sc2 = document.getElementById('spectatorContent');
+          const mini = msg.players.slice(0, 5).map((r, i) =>
+            `<li>${i + 1}. ${r.emoji || ''} ${escapeHtml(r.name)} — ${r.score} pts</li>`
+          ).join('');
+          sc2.innerHTML = `<p class="subtitle">Answer: <strong>${escapeHtml(msg.answer)}</strong></p>
+            <ol style="text-align:left;max-width:300px;margin:0.5rem auto;">${mini}</ol>`;
+          // Make sure eliminated/spectator screen is shown
+          show('eliminated');
+          break;
+        }
+
+        case 'revenge-start': {
+          // Determine if this client is eligible to answer: prefer server-sent eliminated list
+          let amEliminated = false;
+          if (Array.isArray(msg.eliminatedNames)) amEliminated = msg.eliminatedNames.includes(myName);
+          else amEliminated = (typeof myLives === 'number' && myLives <= 0);
+          if (!amEliminated) break;
+          sfxRevenge();
+          const rqText = document.getElementById('revengeQText');
+          rqText.textContent = msg.question;
+          const rChoices = document.getElementById('revengeChoices');
+          rChoices.innerHTML = '';
+          msg.choices.forEach(c => {
+            const btn = document.createElement('button');
+            btn.className = 'choice-btn';
+            btn.textContent = c;
+            btn.onclick = () => {
+              rChoices.querySelectorAll('.choice-btn').forEach(b => b.disabled = true);
+              ws.send(JSON.stringify({ type: 'revenge-answer', choice: c }));
+            };
+            rChoices.appendChild(btn);
+          });
+          show('revenge');
+          break;
+        }
+
+        case 'revenge-result': {
+          const rc = document.getElementById('revengeChoices');
+          rc.innerHTML = '';
+          if (msg.revived) {
+            myLives = 1;
+            document.getElementById('revengeQText').textContent = '🎉 You have been REVIVED!';
+          } else {
+            document.getElementById('revengeQText').textContent = `❌ Wrong! Answer was: ${msg.answer}`;
+          }
+          break;
+        }
+
+        case 'revenge-end': {
+          if (myLives > 0) {
+            // Revived player goes back to active game
+          } else {
+            show('eliminated');
+          }
+          break;
+        }
+
+        case 'paused':
+          clearInterval(studentTimerIv);
+          document.getElementById('pausedOverlay').classList.remove('hidden');
+          break;
+
+        case 'resumed':
+          document.getElementById('pausedOverlay').classList.add('hidden');
+          // Restart student timer using server-provided remaining time when available
+          try {
+            const remaining = (typeof msg.remaining === 'number') ? msg.remaining : null;
+            if (remaining !== null && studentTimeLimit > 0) {
+              const startElapsed = Math.max(0, studentTimeLimit - remaining);
+              startStudentTimer(studentTimeLimit, startElapsed);
+            } else if (studentTimeLimit > 0) {
+              // fallback: resume from previously tracked elapsed
+              startStudentTimer(studentTimeLimit, studentTimeElapsed);
+            }
+          } catch (e) { /* ignore */ }
+          break;
+
+        case 'kicked':
+          stopAmbient();
+          clearInterval(studentTimerIv);
+          show('kicked');
+          break;
+
+        case 'restarted':
+          stopAmbient();
+          myScore = 0;
+          myLives = maxLives;
+          myStreak = 0;
+          prevLives = maxLives;
+          lastChoice = null;
+          clearInterval(studentTimerIv);
+          clearInterval(freezeTimerIv);
+          document.getElementById('freezeOverlay').classList.add('hidden');
+          // Clear frozen flag and ensure wager/choice controls are enabled
+          isFrozen = false;
+          const _wi = document.getElementById('wagerInput'); if (_wi) _wi.disabled = false;
+          const _pb = document.getElementById('placeWagerBtn'); if (_pb) _pb.disabled = false;
+          const _ai = document.getElementById('allInBtn'); if (_ai) _ai.disabled = false;
+          document.getElementById('lobbyAvatar').textContent = myEmoji;
+          document.getElementById('lobbyLives').textContent = livesStr(myLives);
+          document.getElementById('pausedOverlay').classList.add('hidden');
+          show('lobby');
+          break;
+
+        case 'frozen': {
+          sfxFreeze();
+          const fo = document.getElementById('freezeOverlay');
+          const fc = document.getElementById('freezeCountdown');
+          fo.classList.remove('hidden');
+          // Mark frozen state and disable choices + wager controls while frozen
+          isFrozen = true;
+          document.querySelectorAll('#choices .choice-btn').forEach(b => b.disabled = true);
+          const wagerInputEl = document.getElementById('wagerInput');
+          if (wagerInputEl) wagerInputEl.disabled = true;
+          const placeBtn = document.getElementById('placeWagerBtn');
+          if (placeBtn) placeBtn.disabled = true;
+          const allInBtn = document.getElementById('allInBtn');
+          if (allInBtn) allInBtn.disabled = true;
+          let freezeLeft = msg.duration || 3;
+          fc.textContent = freezeLeft;
+          clearInterval(freezeTimerIv);
+          freezeTimerIv = setInterval(() => {
+            freezeLeft--;
+            fc.textContent = freezeLeft;
+            if (freezeLeft <= 0) {
+              clearInterval(freezeTimerIv);
+              fo.classList.add('hidden');
+              // Clear frozen flag and re-enable choices and wager controls
+              isFrozen = false;
+              document.querySelectorAll('#choices .choice-btn').forEach(b => {
+                if (!b.classList.contains('selected')) b.disabled = false;
+              });
+              if (wagerInputEl) wagerInputEl.disabled = false;
+              if (placeBtn) placeBtn.disabled = false;
+              if (allInBtn) allInBtn.disabled = false;
+            }
+          }, 1000);
+          break;
+        }
+
+        case 'freeze-used': {
+          // Brief notification that your freeze hit someone
+          const fuDiv = document.getElementById('stealNotif');
+          fuDiv.textContent = `❄️ You froze ${msg.target}!`;
+          fuDiv.classList.remove('hidden');
+          setTimeout(() => fuDiv.classList.add('hidden'), 3000);
+          break;
+        }
+      }
+    });
+
+    function escapeHtml(str) {
+      const d = document.createElement('div');
+      d.textContent = str;
+      return d.innerHTML;
+    }
+
+    // ── Confetti ────────────────────────────────────────────
+    function fireConfetti() {
+      const canvas = document.getElementById('confetti');
+      const ctx = canvas.getContext('2d');
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+      const colors = ['#6c63ff', '#4caf50', '#ff9800', '#f44336', '#00bcd4', '#ffeb3b'];
+      const particles = [];
+      for (let i = 0; i < 60; i++) {
+        particles.push({
+          x: canvas.width / 2 + (Math.random() - 0.5) * 200,
+          y: canvas.height / 2,
+          vx: (Math.random() - 0.5) * 12,
+          vy: -(Math.random() * 10 + 4),
+          size: Math.random() * 8 + 4,
+          color: colors[Math.floor(Math.random() * colors.length)],
+          rot: Math.random() * 360,
+          rv: (Math.random() - 0.5) * 10,
+          life: 1,
+        });
+      }
+      let raf;
+      function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        let alive = false;
+        particles.forEach(p => {
+          if (p.life <= 0) return;
+          alive = true;
+          p.x += p.vx;
+          p.y += p.vy;
+          p.vy += 0.35;
+          p.rot += p.rv;
+          p.life -= 0.018;
+          ctx.save();
+          ctx.translate(p.x, p.y);
+          ctx.rotate(p.rot * Math.PI / 180);
+          ctx.globalAlpha = Math.max(0, p.life);
+          ctx.fillStyle = p.color;
+          ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 0.6);
+          ctx.restore();
+        });
+        if (alive) { raf = requestAnimationFrame(draw); }
+        else { ctx.clearRect(0, 0, canvas.width, canvas.height); }
+      }
+      draw();
+    }
+
+    // ── Emoji avatar picker ──────────────────────────────
+    const AVATAR_EMOJIS = [
+      '\ud83d\udc36','\ud83d\udc31','\ud83d\udc3c','\ud83e\udd8a','\ud83d\udc38','\ud83d\udc35','\ud83d\udc37','\ud83d\udc30','\ud83d\udc3b','\ud83e\udd81',
+      '\ud83d\udc2e','\ud83d\udc28','\ud83d\udc2f','\ud83d\udc14','\ud83e\udd84','\ud83d\udc19','\ud83e\udd8b','\ud83d\udc22','\ud83e\udd89','\ud83d\udc27',
+      '\ud83d\udc33','\ud83e\udd88','\ud83d\udc32','\ud83d\udc1d','\ud83d\udc1e','\ud83e\udd80','\ud83d\udc20','\ud83e\udda9','\ud83e\udd9c','\ud83d\udc3a',
+    ];
+    function updateTeamBadges() {
+      // Lobby team badge: show only if there is a lobby screen visible
+      const lobbyEl = document.getElementById('lobby');
+      let lBadge = document.getElementById('lobbyTeamBadge');
+      if (!lBadge) {
+        lBadge = document.createElement('div');
+        lBadge.id = 'lobbyTeamBadge';
+        // Insert after lobbyAvatar
+        const ava = document.getElementById('lobbyAvatar');
+        ava.parentNode.insertBefore(lBadge, ava.nextSibling);
+      }
+      if (myTeam) {
+        lBadge.textContent = (myTeam === 'Red' ? '🔴' : '🔵') + ' Team ' + myTeam;
+        lBadge.className = 'team-badge ' + myTeam;
+      } else {
+        lBadge.className = 'team-badge hidden';
+      }
+    }
+
+    function buildLobbyPicker() {
+      const picker = document.getElementById('lobbyPicker');
+      picker.innerHTML = '';
+      AVATAR_EMOJIS.forEach(em => {
+        const btn = document.createElement('button');
+        btn.className = 'emoji-option' + (em === myEmoji ? ' selected' : '');
+        btn.textContent = em;
+        btn.addEventListener('click', () => {
+          myEmoji = em;
+          document.getElementById('lobbyAvatar').textContent = em;
+          picker.querySelectorAll('.emoji-option').forEach(b => b.classList.remove('selected'));
+          btn.classList.add('selected');
+          ws.send(JSON.stringify({ type: 'update-emoji', emoji: em }));
+        });
+        picker.appendChild(btn);
+      });
+    }
+    document.addEventListener('click', (e) => {
+      const avatar = document.getElementById('lobbyAvatar');
+      const picker = document.getElementById('lobbyPicker');
+      if (e.target === avatar) {
+        picker.classList.toggle('hidden');
+      } else if (!picker.contains(e.target)) {
+        picker.classList.add('hidden');
+      }
+    });
+
+    // ── Reaction emojis ──────────────────────────────────
+    document.querySelectorAll('.reaction-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        ws.send(JSON.stringify({ type: 'reaction', emoji: btn.dataset.emoji }));
+        btn.classList.add('sent');
+      });
+    });
+    // Wager controls
+    const placeWagerBtn = document.getElementById('placeWagerBtn');
+    if (placeWagerBtn) {
+      placeWagerBtn.addEventListener('click', () => {
+        const amt = parseInt(document.getElementById('wagerInput').value) || 0;
+        ws.send(JSON.stringify({ type: 'place-wager', amount: amt }));
+        placeWagerBtn.disabled = true;
+      });
+    }
+    const allInBtn = document.getElementById('allInBtn');
+    if (allInBtn) {
+      allInBtn.addEventListener('click', () => {
+        const wi = document.getElementById('wagerInput');
+        if (wi) wi.value = parseInt(wi.max) || 0;
+      });
+    }
+  </script>
+</body>
+</html>

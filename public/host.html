@@ -1,0 +1,1282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Host — Quiz Game</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: #0f0f23;
+      color: #e0e0e0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .container {
+      width: 100%;
+      max-width: 800px;
+      padding: 32px;
+      text-align: center;
+    }
+    h1 { font-size: 2.4rem; color: #fff; margin-bottom: 8px; }
+    h2 { font-size: 1.6rem; color: #fff; margin-bottom: 16px; }
+    .subtitle { color: #888; margin-bottom: 24px; font-size: 1rem; }
+    .hidden { display: none !important; }
+
+    /* Screen transitions */
+    .panel {
+      animation: hostFadeIn 0.4s ease;
+    }
+    @keyframes hostFadeIn {
+      from { opacity: 0; transform: translateY(16px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .btn {
+      padding: 16px 40px;
+      font-size: 1.2rem;
+      font-weight: 700;
+      border: none;
+      border-radius: 14px;
+      cursor: pointer;
+      transition: transform .1s, background .2s;
+    }
+    .btn:active { transform: scale(0.97); }
+    .btn-start { background: #4caf50; color: #fff; font-size: 1.4rem; padding: 18px 60px; }
+    .btn-start:hover { background: #43a047; }
+    .btn-restart { background: #6c63ff; color: #fff; margin-top: 24px; }
+    .btn-restart:hover { background: #5a52d5; }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* Lobby */
+    .player-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      justify-content: center;
+      margin: 24px 0;
+    }
+    .player-chip {
+      background: #1a1a2e;
+      border: 1px solid #333;
+      border-radius: 10px;
+      padding: 10px 18px;
+      font-size: 1rem;
+      font-weight: 500;
+    }
+    .player-count-label {
+      color: #6c63ff;
+      font-size: 1.2rem;
+      font-weight: 600;
+      margin-bottom: 12px;
+    }
+
+    /* Question display */
+    #question-screen .q-number {
+      color: #6c63ff;
+      font-weight: 700;
+      font-size: 1rem;
+      margin-bottom: 12px;
+    }
+    #question-screen .q-text {
+      font-size: 2rem;
+      font-weight: 700;
+      color: #fff;
+      line-height: 1.4;
+      margin-bottom: 28px;
+      animation: textReveal 0.45s ease;
+    }
+    @keyframes textReveal {
+      from { opacity: 0; transform: scale(0.92); filter: blur(4px); }
+      to   { opacity: 1; transform: scale(1); filter: blur(0); }
+    }
+    .host-choices {
+      display: flex;
+      gap: 16px;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin-bottom: 20px;
+    }
+    .host-choice {
+      padding: 16px 32px;
+      font-size: 1.2rem;
+      font-weight: 600;
+      background: #1a1a2e;
+      border: 2px solid #333;
+      border-radius: 12px;
+      min-width: 200px;
+      animation: choiceSlide 0.35s ease backwards;
+    }
+    .host-choice:nth-child(1) { animation-delay: 0.1s; }
+    .host-choice:nth-child(2) { animation-delay: 0.2s; }
+    @keyframes choiceSlide {
+      from { opacity: 0; transform: translateY(12px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .answer-progress {
+      color: #aaa;
+      font-size: 1rem;
+      margin-top: 16px;
+    }
+    .alive-count {
+      display: inline-block;
+      background: #1a1a2e;
+      border: 1px solid #333;
+      border-radius: 8px;
+      padding: 6px 16px;
+      margin-top: 10px;
+      font-size: 0.95rem;
+      color: #aaa;
+    }
+    .alive-count strong { color: #4caf50; }
+    .timer-bar {
+      width: 100%;
+      height: 6px;
+      background: #222;
+      border-radius: 3px;
+      margin-top: 16px;
+      overflow: hidden;
+    }
+    .timer-bar-inner {
+      height: 100%;
+      background: #6c63ff;
+      border-radius: 3px;
+      transition: width 0.3s linear;
+    }
+
+    /* Reveal */
+    #reveal-screen .correct-answer {
+      font-size: 1.4rem;
+      color: #4caf50;
+      font-weight: 700;
+      margin: 16px 0;
+      animation: revealBounce 0.5s ease;
+    }
+    @keyframes revealBounce {
+      0%   { transform: scale(0.4); opacity: 0; }
+      60%  { transform: scale(1.08); opacity: 1; }
+      100% { transform: scale(1); }
+    }
+    .scoreboard {
+      text-align: left;
+      max-width: 500px;
+      margin: 20px auto 0;
+      position: relative;
+    }
+    .scoreboard-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 16px;
+      border-radius: 10px;
+      margin-bottom: 6px;
+      background: #1a1a2e;
+      transition: transform 0.8s cubic-bezier(0.22, 1, 0.36, 1),
+                  opacity 0.4s ease,
+                  box-shadow 0.4s ease;
+    }
+    .scoreboard-row.rank-up {
+      box-shadow: 0 0 12px rgba(76, 175, 80, 0.3);
+    }
+    .scoreboard-row.rank-down {
+      box-shadow: 0 0 12px rgba(244, 67, 54, 0.2);
+    }
+    @keyframes rowSlide {
+      from { opacity: 0; transform: translateX(-20px); }
+      to   { opacity: 1; transform: translateX(0); }
+    }
+    .scoreboard-row.dead { opacity: 0.4; }
+    .sb-name { font-weight: 600; }
+    .sb-lives { letter-spacing: 2px; }
+    .sb-score { color: #6c63ff; font-weight: 600; }
+    .sb-streak {
+      background: linear-gradient(135deg, #ff9800, #ff5722);
+      color: #fff;
+      font-size: 0.75rem;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 10px;
+      margin-left: 6px;
+    }
+    .sb-rank-change {
+      font-size: 0.8rem;
+      font-weight: 700;
+      margin-right: 8px;
+      min-width: 28px;
+      display: inline-block;
+    }
+    .sb-rank-change.up   { color: #4caf50; }
+    .sb-rank-change.down { color: #f44336; }
+    .sb-rank-change.same { color: #555; }
+    .sb-rank-num {
+      color: #6c63ff;
+      font-weight: 800;
+      font-size: 0.85rem;
+      margin-right: 8px;
+      min-width: 20px;
+      display: inline-block;
+    }
+    /* First-round entrance when no previous data */
+    .scoreboard-row.first-appear {
+      animation: rowSlideIn 0.4s ease backwards;
+    }
+    @keyframes rowSlideIn {
+      from { opacity: 0; transform: translateX(-20px); }
+      to   { opacity: 1; transform: translateX(0); }
+    }
+
+    /* Finished */
+    .podium {
+      display: flex;
+      justify-content: center;
+      align-items: flex-end;
+      gap: 16px;
+      margin: 32px 0;
+    }
+    .podium-item {
+      text-align: center;
+      border-radius: 14px;
+      padding: 20px 24px 16px;
+      min-width: 140px;
+      opacity: 0;
+      animation: podiumPop 0.5s ease forwards;
+    }
+    .podium-item:nth-child(1) { animation-delay: 0.15s; }
+    .podium-item:nth-child(2) { animation-delay: 0.35s; }
+    .podium-item:nth-child(3) { animation-delay: 0.55s; }
+    @keyframes podiumPop {
+      0%   { opacity: 0; transform: scale(0.5) translateY(20px); }
+      70%  { opacity: 1; transform: scale(1.06) translateY(-4px); }
+      100% { opacity: 1; transform: scale(1) translateY(0); }
+    }
+    .podium-item.gold   { background: #3a3520; border: 2px solid #ffd700; }
+    .podium-item.silver { background: #2a2a35; border: 2px solid #c0c0c0; }
+    .podium-item.bronze { background: #2e2520; border: 2px solid #cd7f32; }
+    .podium-rank { font-size: 2rem; }
+    .podium-name { font-weight: 700; font-size: 1.1rem; margin: 8px 0 4px; color: #fff; }
+    .podium-score { color: #aaa; font-size: 0.95rem; }
+
+    .full-rankings {
+      list-style: none;
+      text-align: left;
+      max-width: 500px;
+      margin: 0 auto;
+    }
+    .full-rankings li {
+      display: flex;
+      justify-content: space-between;
+      padding: 10px 16px;
+      margin-bottom: 6px;
+      border-radius: 10px;
+      background: #1a1a2e;
+      opacity: 0;
+      animation: rowSlide 0.3s ease forwards;
+    }
+    .full-rankings li:nth-child(1) { animation-delay: 0.6s; }
+    .full-rankings li:nth-child(2) { animation-delay: 0.7s; }
+    .full-rankings li:nth-child(3) { animation-delay: 0.8s; }
+    .full-rankings li:nth-child(4) { animation-delay: 0.9s; }
+    .full-rankings li:nth-child(5) { animation-delay: 1s; }
+    .full-rankings li:nth-child(n+6) { animation-delay: 1.1s; }
+    .full-rankings li:first-child { border: 1px solid #ffd700; }
+    .rank-pos { color: #6c63ff; font-weight: 700; margin-right: 12px; }
+
+    /* Fastest badge */
+    .fastest-badge {
+      display: inline-block;
+      background: linear-gradient(135deg, #ffd700, #ff9800);
+      color: #1a1a2e;
+      padding: 8px 20px;
+      border-radius: 20px;
+      font-weight: 700;
+      font-size: 1rem;
+      margin-bottom: 16px;
+      animation: fastestPop 0.5s ease;
+    }
+    .fastest-badge.hidden { display: none !important; }
+    @keyframes fastestPop {
+      0% { transform: scale(0); opacity: 0; }
+      60% { transform: scale(1.1); opacity: 1; }
+      100% { transform: scale(1); }
+    }
+
+    /* Floating emojis */
+    .emoji-float-container {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 150;
+      overflow: hidden;
+    }
+    .emoji-float {
+      position: absolute;
+      font-size: 2rem;
+      animation: emojiRise 2.5s ease-out forwards;
+      opacity: 0;
+    }
+    @keyframes emojiRise {
+      0% { opacity: 1; transform: translateY(0) scale(0.5); }
+      20% { opacity: 1; transform: translateY(-30px) scale(1.2); }
+      100% { opacity: 0; transform: translateY(-250px) scale(0.8); }
+    }
+
+    /* Intermission */
+    .intermission-badge {
+      color: #ff9800;
+      font-weight: 700;
+      font-size: 1.1rem;
+      margin: 16px 0;
+    }
+    .intermission-timer {
+      color: #888;
+      font-size: 0.95rem;
+      margin-top: 16px;
+      animation: hostPulse 2s infinite;
+    }
+    @keyframes hostPulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    .error-msg { color: #f44336; margin-top: 12px; }
+
+    /* Host controls */
+    .host-controls {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      margin: 16px 0;
+      flex-wrap: wrap;
+    }
+    .btn-ctrl {
+      padding: 10px 22px;
+      font-size: 0.95rem;
+      font-weight: 700;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: transform 0.1s, background 0.2s;
+    }
+    .btn-ctrl:active { transform: scale(0.95); }
+    .btn-pause { background: #ff9800; color: #fff; }
+    .btn-pause:hover { background: #f57c00; }
+    .btn-skip { background: #9c27b0; color: #fff; }
+    .btn-skip:hover { background: #7b1fa2; }
+    .btn-teams { background: #2196f3; color: #fff; margin-top: 12px; }
+    .btn-teams:hover { background: #1976d2; }
+    .btn-teams.active { background: #4caf50; }
+    .btn-kick {
+      background: #f44336;
+      color: #fff;
+      font-size: 0.7rem;
+      padding: 2px 8px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      margin-left: 6px;
+      vertical-align: middle;
+    }
+    .btn-kick:hover { background: #d32f2f; }
+
+    /* Team score panel */
+    .team-scores {
+      display: flex;
+      gap: 20px;
+      justify-content: center;
+      margin: 16px 0;
+    }
+    .team-scores.hidden { display: none !important; }
+    .team-score-card {
+      padding: 14px 28px;
+      border-radius: 12px;
+      font-weight: 700;
+      font-size: 1.1rem;
+      min-width: 160px;
+    }
+    .team-score-card.Red { background: rgba(244,67,54,0.2); border: 2px solid #f44336; color: #f44336; }
+    .team-score-card.Blue { background: rgba(33,150,243,0.2); border: 2px solid #2196f3; color: #2196f3; }
+
+    /* Paused overlay */
+    .host-paused {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.65);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 300;
+    }
+    .host-paused.hidden { display: none !important; }
+    .host-paused-text { font-size: 3rem; font-weight: 800; color: #ff9800; animation: hostPulse 1.5s infinite; }
+
+    /* Player chip with team color */
+    .player-chip.team-Red { border-color: #f44336; }
+    .player-chip.team-Blue { border-color: #2196f3; }
+
+    /* Wager badge */
+    .wager-badge {
+      display: inline-block;
+      background: linear-gradient(135deg, #ff9800, #f44336);
+      color: #fff;
+      padding: 4px 14px;
+      border-radius: 12px;
+      font-weight: 700;
+      font-size: 0.9rem;
+      margin-left: 10px;
+      animation: fastestPop 0.4s ease;
+    }
+
+    /* Urgency vignette for host */
+    .host-urgent-vignette {
+      position: fixed; inset: 0;
+      pointer-events: none;
+      z-index: 200;
+      box-shadow: inset 0 0 120px rgba(255,0,0,0.35);
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+    .host-urgent-vignette.active { opacity: 1; }
+
+    /* Revenge panel */
+    .revenge-panel {
+      background: linear-gradient(135deg, #1a1a2e, #2e1a2e);
+      border: 2px solid #9c27b0;
+      border-radius: 16px;
+      padding: 24px;
+      margin: 20px 0;
+      animation: hostFadeIn 0.4s ease;
+    }
+    .revenge-title {
+      font-size: 1.6rem;
+      font-weight: 800;
+      color: #ce93d8;
+      margin-bottom: 8px;
+    }
+    .revenge-names {
+      color: #aaa;
+      font-size: 0.95rem;
+      margin-bottom: 12px;
+    }
+    .revenge-timer-bar {
+      width: 100%; height: 6px;
+      background: #222; border-radius: 3px;
+      margin-top: 12px; overflow: hidden;
+    }
+    .revenge-timer-bar-inner {
+      height: 100%; background: #9c27b0;
+      border-radius: 3px;
+      transition: width 0.3s linear;
+    }
+
+    /* Host awards section */
+    .host-awards {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      justify-content: center;
+      margin: 20px 0;
+    }
+    .host-award-card {
+      background: #1a1a2e;
+      border: 1px solid #333;
+      border-radius: 12px;
+      padding: 12px 18px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 200px;
+    }
+    .host-award-icon { font-size: 1.8rem; }
+    .host-award-title { font-weight: 700; color: #fff; font-size: 0.9rem; }
+    .host-award-name { color: #aaa; font-size: 0.85rem; }
+
+    /* Settings panel */
+    .settings-panel {
+      background: #1a1a2e;
+      border: 1px solid #333;
+      border-radius: 14px;
+      padding: 20px;
+      margin: 20px 0;
+      text-align: left;
+    }
+    .settings-panel h3 {
+      color: #6c63ff;
+      margin-bottom: 14px;
+      font-size: 1rem;
+      text-align: center;
+    }
+    .setting-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    .setting-row label {
+      color: #ccc;
+      font-size: 0.9rem;
+      font-weight: 600;
+    }
+    .setting-row select, .setting-row input[type="number"] {
+      padding: 6px 10px;
+      font-size: 0.9rem;
+      background: #0f0f23;
+      color: #fff;
+      border: 1px solid #444;
+      border-radius: 8px;
+      min-width: 80px;
+    }
+    .toggle-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 8px;
+    }
+    .toggle-label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.85rem;
+      color: #ccc;
+      cursor: pointer;
+    }
+    .toggle-label input[type="checkbox"] {
+      width: 16px;
+      height: 16px;
+      accent-color: #6c63ff;
+    }
+
+    /* Steal info on reveal */
+    .steal-info {
+      background: linear-gradient(135deg, #f44336, #ff9800);
+      color: #fff;
+      padding: 8px 18px;
+      border-radius: 12px;
+      font-weight: 700;
+      font-size: 0.95rem;
+      margin: 10px 0;
+      animation: fastestPop 0.5s ease;
+    }
+    .steal-info.hidden { display: none !important; }
+
+    /* Freeze indicator on scoreboard */
+    .sb-frozen {
+      color: #81d4fa;
+      font-size: 0.75rem;
+      margin-left: 4px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+
+    <div id="emojiFloat" class="emoji-float-container"></div>
+
+    <!-- Lobby -->
+    <div id="lobby-screen" class="panel">
+      <h1>Quiz Game</h1>
+      <p class="subtitle">Host Dashboard</p>
+      <div class="player-count-label"><span id="playerCount">0</span> Players Joined</div>
+      <div class="player-grid" id="playerGrid"></div>
+      <button class="btn btn-teams" id="toggleTeamsBtn">🏁 Enable Teams</button>
+
+      <!-- Settings Panel -->
+      <div class="settings-panel" id="settingsPanel">
+        <h3>⚙️ Game Settings</h3>
+        <div class="setting-row">
+          <label>Timer (seconds)</label>
+          <select id="setTimer"><option value="5">5</option><option value="10">10</option><option value="15" selected>15</option><option value="20">20</option><option value="30">30</option></select>
+        </div>
+        <div class="setting-row">
+          <label>Lives</label>
+          <select id="setLives"><option value="1">1</option><option value="2">2</option><option value="3" selected>3</option><option value="4">4</option><option value="5">5</option></select>
+        </div>
+        <div class="setting-row">
+          <label>Questions</label>
+          <select id="setQuestions"><option value="5">5</option><option value="10">10</option><option value="15">15</option><option value="20" selected>20</option></select>
+        </div>
+        <div class="toggle-row">
+          <label class="toggle-label"><input type="checkbox" id="setWager" checked> 🎰 Wager</label>
+          <label class="toggle-label"><input type="checkbox" id="setRevenge" checked> 💀 Revenge</label>
+          <label class="toggle-label"><input type="checkbox" id="setPowerUps" checked> ⚡ Power-ups</label>
+          <label class="toggle-label"><input type="checkbox" id="setSteal" checked> 🔥 Steal</label>
+        </div>
+      </div>
+
+      <div style="margin-top:16px"><button class="btn btn-start" id="startBtn">Start Game</button></div>
+      <p id="hostError" class="error-msg hidden"></p>
+    </div>
+
+    <!-- Question -->
+    <div id="question-screen" class="panel hidden">
+      <p class="q-number" id="hostQNum"></p>
+      <p class="q-text" id="hostQText"></p>
+      <div class="host-choices" id="hostChoices"></div>
+      <div class="timer-bar"><div class="timer-bar-inner" id="timerBar"></div></div>
+      <p class="answer-progress" id="answerProgress"></p>
+      <div class="alive-count" id="aliveCount"></div>
+      <div class="host-controls">
+        <button class="btn-ctrl btn-pause" id="pauseBtn">⏸ Pause</button>
+        <button class="btn-ctrl btn-skip" id="skipBtn">⏭ Skip</button>
+      </div>
+    </div>
+
+    <!-- Reveal -->
+    <div id="reveal-screen" class="panel hidden">
+      <h2>Answer Revealed</h2>
+      <p class="correct-answer">✓ <span id="correctAnswer"></span></p>
+      <div id="fastestBadge" class="fastest-badge hidden"></div>
+      <div id="stealBadge" class="steal-info hidden"></div>
+      <div id="revealTeamScores" class="team-scores hidden"></div>
+      <div class="scoreboard" id="scoreboard"></div>
+    </div>
+
+    <!-- Intermission -->
+    <div id="intermission-screen" class="panel hidden">
+      <h1>⏸️ Halftime</h1>
+      <p class="subtitle" id="hostIntermProgress"></p>
+      <div id="intermTeamScores" class="team-scores hidden"></div>
+      <div class="scoreboard" id="intermScoreboard"></div>
+      <div class="intermission-badge" id="hostIntermStreak"></div>
+      <p class="intermission-timer">Continuing soon...</p>
+    </div>
+
+    <!-- Finished -->
+    <div id="finished-screen" class="panel hidden">
+      <h1>🏆 Final Rankings</h1>
+      <div class="host-awards" id="hostAwards"></div>
+      <div class="podium" id="podium"></div>
+      <div id="finishedTeamScores" class="team-scores hidden"></div>
+      <ol class="full-rankings" id="fullRankings"></ol>
+      <button class="btn btn-restart" id="restartBtn">Play Again</button>
+    </div>
+
+    <!-- Urgency vignette -->
+    <div id="hostUrgentVignette" class="host-urgent-vignette"></div>
+
+    <!-- Revenge round display -->
+    <div id="revenge-screen" class="panel hidden">
+      <div class="revenge-panel">
+        <div class="revenge-title">💀 REVENGE ROUND</div>
+        <p class="subtitle">Eliminated players fighting for revival!</p>
+        <p class="revenge-names" id="revengeNames"></p>
+        <p id="revengeQTextHost" style="font-size:1.4rem;font-weight:700;color:#fff;margin:12px 0;"></p>
+        <div class="revenge-timer-bar"><div class="revenge-timer-bar-inner" id="revengeTimerBar"></div></div>
+      </div>
+    </div>
+
+    <!-- Paused overlay -->
+    <div id="hostPausedOverlay" class="host-paused hidden">
+      <div style="text-align:center">
+        <div class="host-paused-text">⏸️ PAUSED</div>
+        <button class="btn btn-start" id="overlayResumeBtn" style="margin-top:24px">▶ Resume</button>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    const ws = new WebSocket(`ws://${location.host}`);
+
+    const panels = ['lobby-screen', 'question-screen', 'reveal-screen', 'intermission-screen', 'revenge-screen', 'finished-screen'];
+    function show(id) {
+      panels.forEach(p => {
+        const el = document.getElementById(p);
+        if (p === id) {
+          el.classList.remove('hidden');
+          el.style.animation = 'none';
+          void el.offsetWidth;
+          el.style.animation = '';
+        } else {
+          el.classList.add('hidden');
+        }
+      });
+    }
+
+    let timerInterval = null;
+    let hostTimeLimitMs = 0;
+    let hostElapsedMs = 0;
+    let prevRanks = {}; // name -> previous rank index (0-based)
+    let teamModeOn = false;
+    let isPaused = false;
+    let maxLives = 3;
+
+    ws.addEventListener('open', () => {
+      ws.send(JSON.stringify({ type: 'host-join' }));
+    });
+
+    document.getElementById('startBtn').addEventListener('click', () => {
+      initAudio();
+      ws.send(JSON.stringify({ type: 'start' }));
+    });
+
+    document.getElementById('restartBtn').addEventListener('click', () => {
+      ws.send(JSON.stringify({ type: 'restart' }));
+    });
+
+    document.getElementById('toggleTeamsBtn').addEventListener('click', () => {
+      ws.send(JSON.stringify({ type: 'toggle-teams' }));
+    });
+
+    document.getElementById('pauseBtn').addEventListener('click', () => {
+      if (isPaused) {
+        ws.send(JSON.stringify({ type: 'resume' }));
+      } else {
+        ws.send(JSON.stringify({ type: 'pause' }));
+      }
+    });
+
+    document.getElementById('overlayResumeBtn').addEventListener('click', () => {
+      ws.send(JSON.stringify({ type: 'resume' }));
+    });
+
+    document.getElementById('skipBtn').addEventListener('click', () => {
+      ws.send(JSON.stringify({ type: 'skip' }));
+    });
+
+    // Settings panel change handlers
+    function sendSettings() {
+      ws.send(JSON.stringify({
+        type: 'update-settings',
+        timer: parseInt(document.getElementById('setTimer').value),
+        lives: parseInt(document.getElementById('setLives').value),
+        questionCount: parseInt(document.getElementById('setQuestions').value),
+        enableWager: document.getElementById('setWager').checked,
+        enableRevenge: document.getElementById('setRevenge').checked,
+        enablePowerUps: document.getElementById('setPowerUps').checked,
+        enableSteal: document.getElementById('setSteal').checked,
+      }));
+    }
+    ['setTimer', 'setLives', 'setQuestions'].forEach(id =>
+      document.getElementById(id).addEventListener('change', sendSettings)
+    );
+    ['setWager', 'setRevenge', 'setPowerUps', 'setSteal'].forEach(id =>
+      document.getElementById(id).addEventListener('change', sendSettings)
+    );
+
+    function livesStr(n) {
+      return Array(Math.max(0, n)).fill('❤️').join('') +
+             Array(Math.max(0, maxLives - n)).fill('🖤').join('');
+    }
+
+    function escapeHtml(str) {
+      const d = document.createElement('div');
+      d.textContent = str;
+      return d.innerHTML;
+    }
+
+    // ── Sound Effects (Web Audio API placeholders) ──────────
+    let audioCtx = null;
+    function initAudio() {
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+    }
+    function playTone(freq, type, duration, vol, ramp) {
+      if (!audioCtx) return;
+      const t = audioCtx.currentTime;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = type;
+      osc.frequency.setValueAtTime(freq, t);
+      if (ramp) osc.frequency.linearRampToValueAtTime(ramp, t + duration);
+      gain.gain.setValueAtTime(vol, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + duration);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start(t);
+      osc.stop(t + duration);
+    }
+    function sfxTick() {
+      playTone(800, 'sine', 0.05, 0.15);
+    }
+    function sfxQuestion() {
+      playTone(600, 'triangle', 0.12, 0.2);
+      setTimeout(() => playTone(900, 'triangle', 0.15, 0.2), 80);
+    }
+    function sfxReveal() {
+      playTone(500, 'sine', 0.1, 0.2);
+      setTimeout(() => playTone(700, 'sine', 0.25, 0.25), 100);
+    }
+    function sfxFinished() {
+      playTone(523, 'square', 0.15, 0.2);
+      setTimeout(() => playTone(659, 'square', 0.15, 0.2), 150);
+      setTimeout(() => playTone(784, 'square', 0.15, 0.2), 300);
+      setTimeout(() => playTone(1047, 'square', 0.4, 0.25), 450);
+    }
+    function sfxTickEscalating(remaining) {
+      const pitch = 600 + Math.max(0, (5000 - remaining) / 5000) * 600;
+      playTone(pitch, 'sine', 0.04, 0.12 + (5000 - remaining) / 5000 * 0.1);
+    }
+    function sfxRevealVariant() {
+      const v = Math.floor(Math.random() * 3);
+      if (v === 0) { sfxReveal(); }
+      else if (v === 1) {
+        playTone(660, 'triangle', 0.12, 0.25);
+        setTimeout(() => playTone(880, 'triangle', 0.2, 0.25), 100);
+      } else {
+        playTone(440, 'sine', 0.1, 0.2);
+        setTimeout(() => playTone(554, 'sine', 0.1, 0.2), 80);
+        setTimeout(() => playTone(660, 'sine', 0.2, 0.25), 160);
+      }
+    }
+    function sfxSteal() {
+      playTone(200, 'sawtooth', 0.15, 0.2);
+      setTimeout(() => playTone(300, 'sawtooth', 0.15, 0.2), 100);
+      setTimeout(() => playTone(600, 'sawtooth', 0.2, 0.25), 200);
+    }
+    function sfxWager() {
+      playTone(440, 'square', 0.08, 0.15);
+      setTimeout(() => playTone(554, 'square', 0.08, 0.15), 100);
+      setTimeout(() => playTone(659, 'square', 0.08, 0.15), 200);
+      setTimeout(() => playTone(880, 'square', 0.2, 0.2), 300);
+    }
+    function sfxRevenge() {
+      playTone(220, 'sawtooth', 0.2, 0.2);
+      setTimeout(() => playTone(330, 'sawtooth', 0.2, 0.2), 150);
+      setTimeout(() => playTone(440, 'sawtooth', 0.3, 0.25), 300);
+    }
+    function startHostTimer(totalMs, startElapsed = 0) {
+      const bar = document.getElementById('timerBar');
+      if (!bar || !totalMs) return;
+      clearInterval(timerInterval);
+      hostTimeLimitMs = totalMs;
+      hostElapsedMs = Math.max(0, startElapsed || 0);
+      // initialize bar width
+      bar.style.width = Math.max(0, 100 - (hostElapsedMs / hostTimeLimitMs) * 100) + '%';
+      timerInterval = setInterval(() => {
+        hostElapsedMs += 100;
+        const pct = Math.max(0, 100 - (hostElapsedMs / hostTimeLimitMs) * 100);
+        bar.style.width = pct + '%';
+        const hostRemaining = Math.max(0, hostTimeLimitMs - hostElapsedMs);
+        if (hostRemaining <= 5000 && hostRemaining > 0 && hostElapsedMs % 1000 < 100) sfxTickEscalating(hostRemaining);
+        if (hostRemaining <= 5000) intensifyAmbient();
+        if (hostRemaining <= 3000) document.getElementById('hostUrgentVignette').classList.add('active');
+        else document.getElementById('hostUrgentVignette').classList.remove('active');
+        if (hostElapsedMs >= hostTimeLimitMs) clearInterval(timerInterval);
+      }, 100);
+    }
+
+    // ── Ambient music during questions ─────────────────
+    let ambientOsc = null, ambientGain = null, ambientLfo = null;
+    let ambientIntensified = false;
+    function startAmbient() {
+      if (!audioCtx) return;
+      stopAmbient();
+      ambientIntensified = false;
+      ambientOsc = audioCtx.createOscillator();
+      ambientGain = audioCtx.createGain();
+      ambientLfo = audioCtx.createOscillator();
+      const lfoGain = audioCtx.createGain();
+      ambientOsc.type = 'sine';
+      ambientOsc.frequency.value = 80;
+      ambientGain.gain.value = 0.06;
+      ambientLfo.type = 'sine';
+      ambientLfo.frequency.value = 2;
+      lfoGain.gain.value = 0.04;
+      ambientLfo.connect(lfoGain);
+      lfoGain.connect(ambientGain.gain);
+      ambientOsc.connect(ambientGain);
+      ambientGain.connect(audioCtx.destination);
+      ambientOsc.start();
+      ambientLfo.start();
+    }
+    function stopAmbient() {
+      try { if (ambientOsc) ambientOsc.stop(); } catch(e) {}
+      try { if (ambientLfo) ambientLfo.stop(); } catch(e) {}
+      ambientOsc = null; ambientLfo = null; ambientGain = null;
+    }
+    function intensifyAmbient() {
+      if (ambientIntensified || !ambientOsc || !audioCtx) return;
+      ambientIntensified = true;
+      const t = audioCtx.currentTime;
+      ambientOsc.frequency.linearRampToValueAtTime(120, t + 0.5);
+      ambientGain.gain.linearRampToValueAtTime(0.12, t + 0.5);
+    }
+
+    ws.addEventListener('message', (e) => {
+      const msg = JSON.parse(e.data);
+
+      switch (msg.type) {
+        case 'settings-updated': {
+          const s = msg.settings;
+          maxLives = s.lives;
+          document.getElementById('setTimer').value = s.timer;
+          document.getElementById('setLives').value = s.lives;
+          document.getElementById('setQuestions').value = s.questionCount;
+          document.getElementById('setWager').checked = s.enableWager;
+          document.getElementById('setRevenge').checked = s.enableRevenge;
+          document.getElementById('setPowerUps').checked = s.enablePowerUps;
+          document.getElementById('setSteal').checked = s.enableSteal;
+          break;
+        }
+
+        case 'host-ok':
+          break;
+
+        case 'lobby': {
+          document.getElementById('playerCount').textContent = msg.players.length;
+          const grid = document.getElementById('playerGrid');
+          grid.innerHTML = '';
+          msg.players.forEach(p => {
+            const chip = document.createElement('div');
+            chip.className = 'player-chip' + (p.team ? ' team-' + p.team : '');
+            const nameSpan = document.createTextNode((p.emoji || '') + ' ' + p.name + (p.team ? ' ' + (p.team === 'Red' ? '🔴' : '🔵') : ''));
+            chip.appendChild(nameSpan);
+            const kickBtn = document.createElement('button');
+            kickBtn.className = 'btn-kick';
+            kickBtn.textContent = '✕';
+            kickBtn.addEventListener('click', () => {
+              ws.send(JSON.stringify({ type: 'kick', name: p.name }));
+            });
+            chip.appendChild(kickBtn);
+            grid.appendChild(chip);
+          });
+          // Sync team mode button
+          if (msg.teamMode !== undefined) {
+            teamModeOn = msg.teamMode;
+            const tb = document.getElementById('toggleTeamsBtn');
+            tb.textContent = teamModeOn ? '🏁 Teams ON' : '🏁 Enable Teams';
+            tb.classList.toggle('active', teamModeOn);
+          }
+          show('lobby-screen');
+          break;
+        }
+
+        case 'error': {
+          const err = document.getElementById('hostError');
+          err.textContent = msg.message;
+          err.classList.remove('hidden');
+          setTimeout(() => err.classList.add('hidden'), 3000);
+          break;
+        }
+
+        case 'game-start':
+          show('question-screen');
+          document.getElementById('hostQText').textContent = 'Get Ready…';
+          document.getElementById('hostQNum').textContent = '';
+          document.getElementById('hostChoices').innerHTML = '';
+          document.getElementById('answerProgress').textContent = '';
+          break;
+
+        case 'question': {
+          show('question-screen');
+          sfxQuestion();
+          startAmbient();
+          const wagerLabel = msg.wager ? '<span class="wager-badge">🎰 WAGER ROUND</span>' : '';
+          if (msg.wager) sfxWager();
+          document.getElementById('hostQNum').innerHTML = `Question ${msg.index + 1} of ${msg.total}${wagerLabel}`;
+          document.getElementById('hostQText').textContent = msg.question;
+          document.getElementById('hostUrgentVignette').classList.remove('active');
+          const choices = document.getElementById('hostChoices');
+          choices.innerHTML = '';
+          msg.choices.forEach(c => {
+            const div = document.createElement('div');
+            div.className = 'host-choice';
+            div.textContent = c;
+            choices.appendChild(div);
+          });
+          document.getElementById('answerProgress').textContent = 'Waiting for answers…';
+          document.getElementById('aliveCount').innerHTML =
+            `<strong>${msg.aliveCount || '?'}</strong> / ${msg.totalPlayers || '?'} players alive`;
+
+          // Timer bar (dynamic time limit)
+          const timeMs = (msg.timeLimit || 15) * 1000;
+          // Start host timer helper which manages visual bar and sounds
+          startHostTimer(timeMs, 0);
+          break;
+        }
+
+        case 'answer-count':
+          document.getElementById('answerProgress').textContent =
+            `${msg.answered} / ${msg.total} answered`;
+          break;
+
+        case 'reveal': {
+          clearInterval(timerInterval);
+          stopAmbient();
+          sfxRevealVariant();
+          document.getElementById('hostUrgentVignette').classList.remove('active');
+          show('reveal-screen');
+          document.getElementById('correctAnswer').textContent = msg.answer;
+          // Fastest badge
+          const fb = document.getElementById('fastestBadge');
+          if (msg.fastest) {
+            fb.textContent = `⚡ Fastest: ${msg.fastestEmoji || ''} ${msg.fastest}`;
+            fb.classList.remove('hidden');
+          } else {
+            fb.classList.add('hidden');
+          }
+          // Steal badge
+          const sb2 = document.getElementById('stealBadge');
+          if (msg.steal) {
+            sfxSteal();
+            sb2.textContent = `⚡ ${msg.steal.toEmoji || ''} ${msg.steal.to} stole ${msg.steal.amount} pts from ${msg.steal.fromEmoji || ''} ${msg.steal.from}!`;
+            sb2.classList.remove('hidden');
+          } else {
+            sb2.classList.add('hidden');
+          }
+          if (msg.aliveCount !== undefined) {
+            document.getElementById('aliveCount').innerHTML =
+              `<strong>${msg.aliveCount}</strong> players still alive`;
+          }
+          renderAnimatedScoreboard(msg.players);
+          renderTeamScores('revealTeamScores', msg.teamMode, msg.teamScores);
+          break;
+        }
+
+        case 'finished': {
+          clearInterval(timerInterval);
+          stopAmbient();
+          sfxFinished();
+          document.getElementById('hostUrgentVignette').classList.remove('active');
+          show('finished-screen');
+
+          // Awards
+          const awardsEl = document.getElementById('hostAwards');
+          awardsEl.innerHTML = '';
+          if (msg.awards && msg.awards.length > 0) {
+            msg.awards.forEach(a => {
+              const card = document.createElement('div');
+              card.className = 'host-award-card';
+              card.innerHTML = `<span class="host-award-icon">${a.icon}</span>
+                <div><div class="host-award-title">${escapeHtml(a.title)}</div>
+                <div class="host-award-name">${a.emoji || ''} ${escapeHtml(a.name)} — ${escapeHtml(a.detail)}</div></div>`;
+              awardsEl.appendChild(card);
+            });
+          }
+
+          const podium = document.getElementById('podium');
+          podium.innerHTML = '';
+          const medals = ['gold', 'silver', 'bronze'];
+          const rankIcons = ['🥇', '🥈', '🥉'];
+          msg.rankings.slice(0, 3).forEach((r, i) => {
+            const div = document.createElement('div');
+            div.className = `podium-item ${medals[i]}`;
+            div.innerHTML = `<div class="podium-rank">${rankIcons[i]}</div>
+                             <div class="podium-name">${r.emoji || ''} ${escapeHtml(r.name)}</div>
+                             <div class="podium-score">${r.score} pts</div>`;
+            podium.appendChild(div);
+          });
+
+          const list = document.getElementById('fullRankings');
+          list.innerHTML = '';
+          msg.rankings.forEach((r, i) => {
+            const li = document.createElement('li');
+            const teamIcon = r.team ? (r.team === 'Red' ? '🔴 ' : '🔵 ') : '';
+            li.innerHTML = `<span><span class=\"rank-pos\">#${i + 1}</span>${teamIcon}${r.emoji || ''} ${escapeHtml(r.name)}</span>
+                            <span class=\"sb-score\">${r.score} pts ${livesStr(r.lives)}</span>`;
+            list.appendChild(li);
+          });
+          renderTeamScores('finishedTeamScores', msg.teamMode, msg.teamScores);
+          break;
+        }
+
+        case 'revenge-start': {
+          show('revenge-screen');
+          stopAmbient();
+          sfxRevenge();
+          document.getElementById('revengeNames').textContent =
+            'Fighting: ' + msg.eliminatedNames.join(', ');
+          document.getElementById('revengeQTextHost').textContent = msg.question;
+          const rTimeMs = (msg.timeLimit || 10) * 1000;
+          const rBar = document.getElementById('revengeTimerBar');
+          rBar.style.width = '100%';
+          let rElapsed = 0;
+          clearInterval(timerInterval);
+          timerInterval = setInterval(() => {
+            rElapsed += 100;
+            rBar.style.width = Math.max(0, 100 - (rElapsed / rTimeMs) * 100) + '%';
+            if (rElapsed >= rTimeMs) clearInterval(timerInterval);
+          }, 100);
+          break;
+        }
+
+        case 'revenge-end': {
+          clearInterval(timerInterval);
+          const revived = msg.revived || [];
+          if (revived.length > 0) {
+            document.getElementById('revengeQTextHost').textContent =
+              '🎉 Revived: ' + revived.join(', ');
+          } else {
+            document.getElementById('revengeQTextHost').textContent = 'No one was revived.';
+          }
+          document.getElementById('revengeNames').textContent =
+            'Answer: ' + msg.answer;
+          break;
+        }
+
+        case 'paused':
+          isPaused = true;
+          clearInterval(timerInterval);
+          document.getElementById('hostPausedOverlay').classList.remove('hidden');
+          document.getElementById('pauseBtn').textContent = '▶ Resume';
+          stopAmbient();
+          break;
+
+        case 'resumed':
+          isPaused = false;
+          document.getElementById('hostPausedOverlay').classList.add('hidden');
+          document.getElementById('pauseBtn').textContent = '⏸ Pause';
+          startAmbient();
+          // Resume visual timer using server-provided remaining time when available
+          if (typeof msg.remaining === 'number') {
+            const remaining = Math.max(0, msg.remaining);
+            if (hostTimeLimitMs > 0) {
+              const startElapsed = Math.max(0, hostTimeLimitMs - remaining);
+              startHostTimer(hostTimeLimitMs, startElapsed);
+            } else {
+              // Fallback: show a full bar for the remaining duration
+              startHostTimer(remaining, 0);
+            }
+          }
+          break;
+
+        case 'restarted':
+          prevRanks = {};
+          isPaused = false;
+          document.getElementById('hostPausedOverlay').classList.add('hidden');
+          document.getElementById('pauseBtn').textContent = '⏸ Pause';
+          show('lobby-screen');
+          break;
+
+        case 'intermission': {
+          clearInterval(timerInterval);
+          stopAmbient();
+          show('intermission-screen');
+          document.getElementById('hostIntermProgress').textContent =
+            `${msg.questionsCompleted} of ${msg.questionsTotal} questions completed`;
+          const intermSb = document.getElementById('intermScoreboard');
+          intermSb.innerHTML = '';
+          msg.rankings.forEach((r, i) => {
+            const row = document.createElement('div');
+            row.className = 'scoreboard-row' + (r.alive ? '' : ' dead');
+            row.style.animation = `rowSlideIn 0.3s ease ${i * 0.06}s backwards`;
+            const streakHtml = r.streak >= 2 ? `<span class="sb-streak">🔥${r.streak}</span>` : '';
+            row.innerHTML = `<span class="sb-name"><span class="sb-rank-num">#${i + 1}</span>${r.emoji || ''} ${escapeHtml(r.name)}${streakHtml}</span>
+                             <span class="sb-lives">${livesStr(r.lives)}</span>
+                             <span class="sb-score">${r.score} pts</span>`;
+            intermSb.appendChild(row);
+          });
+          const sl = msg.streakLeader;
+          document.getElementById('hostIntermStreak').textContent = sl
+            ? `🔥 Streak Leader: ${sl.emoji || ''} ${sl.name} (${sl.streak} in a row!)`
+            : '';
+          renderTeamScores('intermTeamScores', msg.teamMode, msg.teamScores);
+          break;
+        }
+
+        case 'reaction': {
+          const container = document.getElementById('emojiFloat');
+          const el = document.createElement('div');
+          el.className = 'emoji-float';
+          el.textContent = msg.emoji;
+          el.style.left = (20 + Math.random() * 60) + '%';
+          el.style.bottom = '10%';
+          container.appendChild(el);
+          setTimeout(() => el.remove(), 2500);
+          break;
+        }
+      }
+    });
+
+    // ── Animated leaderboard with FLIP-style rank shifts ──────────
+    function renderAnimatedScoreboard(players) {
+      const sb = document.getElementById('scoreboard');
+      const sorted = [...players].sort((a, b) => b.score - a.score || b.lives - a.lives);
+      const isFirstRound = Object.keys(prevRanks).length === 0;
+      const ROW_HEIGHT = 48; // approx height of row + margin
+
+      // Build new rank map
+      const newRanks = {};
+      sorted.forEach((p, i) => { newRanks[p.name] = i; });
+
+      // If it's the very first reveal, just slide rows in with stagger
+      if (isFirstRound) {
+        sb.innerHTML = '';
+        sorted.forEach((p, i) => {
+          const row = createRow(p, i, 0);
+          row.classList.add('first-appear');
+          row.style.animationDelay = (i * 0.08 + 0.1) + 's';
+          sb.appendChild(row);
+        });
+        prevRanks = newRanks;
+        return;
+      }
+
+      // FLIP animation: render at old positions, then animate to new
+      sb.innerHTML = '';
+
+      // Place all rows at their OLD position via transform
+      const rows = sorted.map((p, newIdx) => {
+        const oldIdx = prevRanks[p.name] !== undefined ? prevRanks[p.name] : newIdx;
+        const delta = newIdx - oldIdx; // how many rank changes
+        const row = createRow(p, newIdx, delta);
+
+        // Start at old y-offset relative to new position
+        const offsetY = (oldIdx - newIdx) * ROW_HEIGHT;
+        row.style.transform = `translateY(${offsetY}px)`;
+        row.style.transition = 'none';
+
+        if (delta < 0) row.classList.add('rank-up');
+        else if (delta > 0) row.classList.add('rank-down');
+
+        sb.appendChild(row);
+        return row;
+      });
+
+      // Force layout, then animate to final position
+      void sb.offsetHeight;
+      requestAnimationFrame(() => {
+        rows.forEach(row => {
+          row.style.transition = '';
+          row.style.transform = 'translateY(0)';
+        });
+      });
+
+      prevRanks = newRanks;
+    }
+
+    function renderTeamScores(containerId, teamMode, teamScores) {
+      const el = document.getElementById(containerId);
+      if (!teamMode || !teamScores || teamScores.length === 0) {
+        el.classList.add('hidden');
+        return;
+      }
+      el.classList.remove('hidden');
+      el.innerHTML = '';
+      teamScores.forEach(t => {
+        const card = document.createElement('div');
+        card.className = 'team-score-card ' + t.name;
+        card.innerHTML = `${t.icon} Team ${escapeHtml(t.name)}<br><span style="font-size:1.6rem">${t.score}</span> pts`;
+        el.appendChild(card);
+      });
+    }
+
+    function createRow(p, idx, rankDelta) {
+      const row = document.createElement('div');
+      row.className = 'scoreboard-row' + (p.alive ? '' : ' dead');
+
+      const rankNum = `<span class="sb-rank-num">#${idx + 1}</span>`;
+
+      let changeHtml;
+      if (rankDelta < 0) {
+        changeHtml = `<span class="sb-rank-change up">▲${Math.abs(rankDelta)}</span>`;
+      } else if (rankDelta > 0) {
+        changeHtml = `<span class="sb-rank-change down">▼${rankDelta}</span>`;
+      } else {
+        changeHtml = `<span class="sb-rank-change same">—</span>`;
+      }
+
+      const streakHtml = p.streak >= 2 ? `<span class="sb-streak">🔥${p.streak}</span>` : '';
+      const puHtml = p.powerUp === 'shield' ? ' 🛡️' : p.powerUp === 'double' ? ' ⚡' : p.powerUp === 'freeze' ? ' ❄️' : '';
+      const frozenHtml = p.frozen ? '<span class="sb-frozen">❄️FROZEN</span>' : '';
+      const emojiHtml = p.emoji ? escapeHtml(p.emoji) + ' ' : '';
+      const teamIcon = p.team ? (p.team === 'Red' ? '🔴' : '🔵') + ' ' : '';
+
+      row.innerHTML = `<span class="sb-name">${rankNum}${changeHtml}${teamIcon}${emojiHtml}${escapeHtml(p.name)}${puHtml}${frozenHtml}${streakHtml}</span>
+                       <span class="sb-lives">${livesStr(p.lives)}</span>
+                       <span class="sb-score">${p.score} pts</span>`;
+      return row;
+    }
+  </script>
+</body>
+</html>

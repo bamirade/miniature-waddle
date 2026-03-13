@@ -1,0 +1,13 @@
+{
+  "name": "miniature-waddle",
+  "version": "1.0.0",
+  "description": "Real-time quiz game with host and student views",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.0",
+    "ws": "^8.18.0"
+  }
+}
