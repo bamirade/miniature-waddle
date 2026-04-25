@@ -1,0 +1,12 @@
+{
+  "name": "miniature-waddle-electron",
+  "version": "1.0.0",
+  "main": "electron/main.js",
+  "description": "Electron wrapper for Miniature Waddle server.",
+  "scripts": {
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "electron": "^29.0.0"
+  }
+}

@@ -11,26 +11,26 @@ app.use(express.static(path.join(__dirname, "public")));
 
 // ── Sample questions ────────────────────────────────────────────
 const QUESTIONS = [
-  { question: "What planet is known as the Red Planet?", choices: ["Mars", "Venus"], answer: "Mars" },
-  { question: "What is the largest ocean on Earth?", choices: ["Pacific Ocean", "Atlantic Ocean"], answer: "Pacific Ocean" },
-  { question: "Who painted the Mona Lisa?", choices: ["Leonardo da Vinci", "Michelangelo"], answer: "Leonardo da Vinci" },
-  { question: "What is the chemical symbol for water?", choices: ["H2O", "CO2"], answer: "H2O" },
-  { question: "Which country is the Great Wall located in?", choices: ["China", "Japan"], answer: "China" },
-  { question: "How many continents are there?", choices: ["7", "6"], answer: "7" },
-  { question: "What gas do plants absorb from the atmosphere?", choices: ["Carbon Dioxide", "Oxygen"], answer: "Carbon Dioxide" },
-  { question: "What is the hardest natural substance?", choices: ["Diamond", "Iron"], answer: "Diamond" },
-  { question: "Which planet is closest to the Sun?", choices: ["Mercury", "Venus"], answer: "Mercury" },
-  { question: "What is the speed of light approximately?", choices: ["300,000 km/s", "150,000 km/s"], answer: "300,000 km/s" },
-  { question: "What is the powerhouse of the cell?", choices: ["Mitochondria", "Nucleus"], answer: "Mitochondria" },
-  { question: "Which element has the symbol 'O'?", choices: ["Oxygen", "Gold"], answer: "Oxygen" },
-  { question: "What is the tallest mountain on Earth?", choices: ["Mount Everest", "K2"], answer: "Mount Everest" },
-  { question: "Which organ pumps blood through the body?", choices: ["Heart", "Liver"], answer: "Heart" },
-  { question: "How many bones are in the adult human body?", choices: ["206", "300"], answer: "206" },
-  { question: "What is the largest planet in our solar system?", choices: ["Jupiter", "Saturn"], answer: "Jupiter" },
-  { question: "Which animal is the largest mammal?", choices: ["Blue Whale", "Elephant"], answer: "Blue Whale" },
-  { question: "What force keeps us on the ground?", choices: ["Gravity", "Magnetism"], answer: "Gravity" },
-  { question: "Which language has the most native speakers?", choices: ["Mandarin Chinese", "English"], answer: "Mandarin Chinese" },
-  { question: "What is the boiling point of water in Celsius?", choices: ["100°C", "90°C"], answer: "100°C" },
+  { question: "A teacher divides the class into teams and hands out cards labeled 'Leader,' 'Secretary,' and 'Timekeeper.' Every student must stick to their specific assigned job.", choices: ["Cooperative", "Collaborative"], answer: "Cooperative" },
+  { question: "A professor gives a complex prompt and tells students they are free to organize themselves, pick their own teammates, and decide how to manage their own time.", choices: ["Cooperative", "Collaborative"], answer: "Collaborative" },
+  { question: "A group is making a poster. One student draws the title, another writes the facts, and a third colors the border. The work is strictly partitioned so each person is responsible for a specific portion.", choices: ["Cooperative", "Collaborative"], answer: "Cooperative" },
+  { question: "A team sits around a single laptop, mutually searching for understanding and writing a theory together from scratch without dividing the tasks into pieces.", choices: ["Cooperative", "Collaborative"], answer: "Collaborative" },
+  { question: "The teacher gives a worksheet where every question has a specific 'correct' solution and watches groups closely to ensure they find that exact answer.", choices: ["Cooperative", "Collaborative"], answer: "Cooperative" },
+  { question: "Students are asked to create their own solution to an ambiguous community problem where the teacher does not have a pre-set 'correct' answer or expected result in mind.", choices: ["Cooperative", "Collaborative"], answer: "Collaborative" },
+  { question: "At the end of the lesson, the teacher gives a 'Super Team' award to the group with the highest average score on their individual quizzes.", choices: ["Cooperative", "Collaborative"], answer: "Cooperative" },
+  { question: "A student group describes their work not just as a 'technique' for a grade, but as a 'personal philosophy' or lifestyle of respecting peer contributions.", choices: ["Cooperative", "Collaborative"], answer: "Collaborative" },
+  { question: "A student is sent to an 'expert group' to learn one specific part of a lesson so they can teach it back to their original home team.", choices: ["Cooperative", "Collaborative"], answer: "Cooperative" },
+  { question: "Students spend the class negotiating the boundaries between what they currently know and the professional standards of the academic community they wish to join.", choices: ["Cooperative", "Collaborative"], answer: "Collaborative" },
+  { question: "The teacher has students number off and then calls out 'Number 3!' The third person in every group must stand up and represent their team's answer.", choices: ["Cooperative", "Collaborative"], answer: "Cooperative" },
+  { question: "The teacher acts as a 'mid-wife' or coach, only stepping in to help when students specifically request assistance during their self-governed work.", choices: ["Cooperative", "Collaborative"], answer: "Collaborative" },
+  { question: "Students use a specific 'script' to take turns as 'Recaller' and 'Listener' while reading a technical manual, following a series of prescribed steps.", choices: ["Cooperative", "Collaborative"], answer: "Cooperative" },
+  { question: "A group of literature students debates a poem, aiming to reach a consensus on its meaning based on their shared reasoning and dialogue.", choices: ["Cooperative", "Collaborative"], answer: "Collaborative" },
+  { question: "The instructor structures the social interaction by telling students exactly when to talk, when to write, and when to listen.", choices: ["Cooperative", "Collaborative"], answer: "Cooperative" },
+  { question: "A group decides to divide responsibilities as they see fit, exercising their own creativity and choosing their own source material without following a provided role sheet.", choices: ["Cooperative", "Collaborative"], answer: "Collaborative" },
+  { question: "Students play an academic game (Teams-Games-Tournaments) to compete against other teams of similar ability levels to master foundational facts.", choices: ["Cooperative", "Collaborative"], answer: "Cooperative" },
+  { question: "The group is tackling a controversial question with no 'widely agreed-upon' answer, requiring high-level judgment and mutual exploration.", choices: ["Cooperative", "Collaborative"], answer: "Collaborative" },
+  { question: "Before starting, the teacher spends 10 minutes purposefully teaching social skills like how to resolve conflicts and build trust as precisely as academic skills.", choices: ["Cooperative", "Collaborative"], answer: "Cooperative" },
+  { question: "Success depends on the collective mutual responsibility of the whole group for the final product, rather than individual role execution or individual scores.", choices: ["Cooperative", "Collaborative"], answer: "Collaborative" }
 ];
 
 // ── Emoji avatars ───────────────────────────────────────────────
@@ -52,6 +52,7 @@ let gameSettings = {
   enableRevenge: true,
   enablePowerUps: true,
   enableSteal: true, // fastest steals from slowest each round
+  enableEngagement: false, // host toggle for engagement mode
 };
 // Wager tuning
 const WAGER_MAX_FRACTION = 0.33; // max fraction of a player's score they may wager
@@ -626,10 +627,20 @@ wss.on("connection", (ws) => {
             if (p.powerUp === 'double') p.powerUp = null;
           }
           // Award power-up randomly on streak (shield, double, or freeze)
-          if (gameSettings.enablePowerUps && p.streak >= 3 && !p.powerUp && Math.random() < 0.25) {
-            const r = Math.random();
-            p.powerUp = r < 0.33 ? 'double' : r < 0.66 ? 'shield' : 'freeze';
-            p._newPowerUp = p.powerUp;
+          // Engagement mode: powerups are much more frequent and ignore streak
+          if (gameSettings.enablePowerUps && !p.powerUp) {
+            if (gameSettings.enableEngagement) {
+              // 80% chance per question, no streak requirement
+              if (Math.random() < 0.8) {
+                const r = Math.random();
+                p.powerUp = r < 0.33 ? 'double' : r < 0.66 ? 'shield' : 'freeze';
+                p._newPowerUp = p.powerUp;
+              }
+            } else if (p.streak >= 3 && Math.random() < 0.25) {
+              const r = Math.random();
+              p.powerUp = r < 0.33 ? 'double' : r < 0.66 ? 'shield' : 'freeze';
+              p._newPowerUp = p.powerUp;
+            }
           }
         } else if (p.powerUp === 'shield') {
           p.powerUp = null;
@@ -793,6 +804,7 @@ wss.on("connection", (ws) => {
         if (typeof msg.enableRevenge === 'boolean') gameSettings.enableRevenge = msg.enableRevenge;
         if (typeof msg.enablePowerUps === 'boolean') gameSettings.enablePowerUps = msg.enablePowerUps;
         if (typeof msg.enableSteal === 'boolean') gameSettings.enableSteal = msg.enableSteal;
+        if (typeof msg.enableEngagement === 'boolean') gameSettings.enableEngagement = msg.enableEngagement;
         sendTo(ws, { type: 'settings-updated', settings: gameSettings });
         break;
       }

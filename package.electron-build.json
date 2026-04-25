@@ -1,0 +1,12 @@
+// This file is for building a Windows executable from the Electron app
+// Use electron-packager or electron-builder for packaging
+{
+  "name": "build-electron-win",
+  "version": "1.0.0",
+  "scripts": {
+    "build:win": "npx electron-packager . MiniWaddleHost --platform=win32 --arch=x64 --out=dist --overwrite --icon=public/favicon.ico --prune=true --ignore=dist"
+  },
+  "devDependencies": {
+    "electron-packager": "^17.1.1"
+  }
+}
